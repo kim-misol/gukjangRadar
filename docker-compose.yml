@@ -1,0 +1,39 @@
+name: gukjang-radar
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: gukjang-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gukjang
+      POSTGRES_PASSWORD: gukjang
+      POSTGRES_DB: gukjang_radar
+    ports:
+      - '5432:5432'
+    volumes:
+      - gukjang_pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gukjang -d gukjang_radar']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: gukjang-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - gukjang_redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  gukjang_pg_data:
+  gukjang_redis_data:

@@ -1,0 +1,19 @@
+node_modules
+.turbo
+.next
+dist
+build
+coverage
+pnpm-lock.yaml
+packages/db/drizzle/**
+apps/web/next-env.d.ts
+
+# 설계 문서 패키지 원본 — 우리가 임의로 재포맷하지 않는다 (CLAUDE.md §0)
+CLAUDE.md
+README.md
+docs/**
+spec/*.md
+spec/prompts/**
+spec/golden/**
+spec/openapi.yaml
+spec/scoring.config.json

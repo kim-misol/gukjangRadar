@@ -1,0 +1,15 @@
+{
+  "name": "@gukjang/spec",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "기계가 읽는 단일 진실 원천: enum/DTO 타입, DDL, OpenAPI, 스코어링 가중치, 프롬프트, 골든셋. CLAUDE.md §3 참조.",
+  "main": "./types.ts",
+  "types": "./types.ts",
+  "exports": {
+    ".": "./types.ts",
+    "./scoring.config.json": "./scoring.config.json",
+    "./golden/*": "./golden/*",
+    "./prompts/*": "./prompts/*"
+  }
+}

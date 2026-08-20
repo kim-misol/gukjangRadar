@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      # CI에서는 실제 DB에 연결하지 않는 검사만 돈다 (typecheck/lint/test/enum-sync/forbidden-words).
+      # 마이그레이션·시드는 T4용 별도 통합 워크플로에서 실제 postgres 서비스 컨테이너로 돈다.
+      DATABASE_URL: postgres://gukjang:gukjang@localhost:5432/gukjang_radar
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-only-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint (R5 금지어 린터 포함)
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Enum sync (spec/schema.sql ↔ spec/types.ts)
+        run: pnpm check-enum-sync
+
+      - name: Forbidden words (R5 / docs/01-prd.md §7 D4)
+        run: pnpm lint-forbidden-words

@@ -1,0 +1,48 @@
+{
+  "name": "gukjang-radar",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint && eslint scripts",
+    "typecheck": "turbo run typecheck",
+    "check-enum-sync": "tsx scripts/check-enum-sync.ts",
+    "lint-forbidden-words": "tsx scripts/lint-forbidden-words.ts",
+    "db:generate": "pnpm --filter @gukjang/db generate",
+    "db:migrate": "pnpm --filter @gukjang/db migrate",
+    "db:reset": "pnpm --filter @gukjang/db reset",
+    "db:seed": "pnpm --filter @gukjang/db seed",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@gukjang/core": "workspace:*",
+    "@gukjang/spec": "workspace:*",
+    "fast-glob": "^3.3.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.15.0",
+    "prettier": "^3.4.1",
+    "tsx": "^4.19.2",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.16.0",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@nestjs/core",
+      "esbuild",
+      "msgpackr-extract",
+      "sharp"
+    ]
+  }
+}
