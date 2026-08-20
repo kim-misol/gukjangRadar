@@ -47,7 +47,21 @@ apps/web  apps/worker  packages/core  packages/db  spec/  docs/
 3. 스키마를 바꿔야 하면 `spec/schema.sql` + `packages/db` 마이그레이션 + `spec/types.ts`를 **같은 커밋**에서 함께 고친다.
 4. 새 연결 유형·가중치를 추가하면 `spec/golden/golden_set.jsonl`에 케이스를 추가한다.
 
-## 5. 용어 (한/영 고정)
+## 5. 워크플로우 (TDD)
+새 로직(특히 `packages/core`, 파이프라인 단계, 스코어링 규칙)을 만들거나 고칠 때는 항상 TDD로 진행한다.
+1. **Red** — 원하는 동작을 표현하는 실패하는 테스트를 먼저 쓴다. 새 연결 유형·스코어링 규칙을 추가하는 경우 `spec/golden/golden_set.jsonl` 케이스도 같이 추가한다(§4-4).
+2. **Green** — 테스트를 통과시키는 최소 구현만 한다. 앞서가서 다음 기능까지 만들지 않는다.
+3. **Refactor** — 테스트가 초록인 상태를 유지하며 정리한다. 테스트 자체는 동작이 바뀌는 게 아니면 건드리지 않는다.
+
+- 테스트 실행: `pnpm test`(전체) 또는 `pnpm --filter <pkg> test`(해당 워크스페이스만, 예: `@gukjang/core`).
+- 커밋 전에 로컬에서 CI와 동일한 게이트를 순서대로 통과시킨다:
+  `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm check-enum-sync && pnpm lint-forbidden-words`
+- 커밋 메시지:
+  - 제목: `type(scope): 요약` (`type` = `feat|fix|refactor|test|chore|docs`, `scope` = 주차 예: `W1` 또는 패키지명)
+  - 본문: 변경 사항을 불릿으로, 마지막 줄에 `DoD verified: ...`로 무엇을 어떻게 확인했는지 남긴다(테스트 통과만으로 부족하면 수동 확인 내용도 적는다).
+  - 기존 커밋(`git log`) 스타일을 그대로 따른다.
+
+## 6. 용어 (한/영 고정)
 | 한글 | 코드 | 뜻 |
 |---|---|---|
 | 개체 | `entity` | 뉴스에서 뽑은 사람/장소/제품/사건/단어 |

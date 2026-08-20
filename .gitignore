@@ -1,11 +1,45 @@
+# ── Dependencies ───────────────────────────────────
 node_modules
-.turbo
-.next
+.pnpm-store
+
+# ── Build outputs ──────────────────────────────────
 dist
 build
+out
+.next
+.turbo
+*.tsbuildinfo
+_to
+
+# ── Test / coverage ────────────────────────────────
 coverage
+*.lcov
+
+# ── Env (secrets: DB, LLM, KIS, DART, JWT, VAPID) ──
 .env
 .env.local
+.env.*.local
+!.env.example
+
+# ── Logs ────────────────────────────────────────────
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── OS ──────────────────────────────────────────────
 .DS_Store
-*.tsbuildinfo
+Thumbs.db
+
+# ── Editor ──────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+
+# ── Claude Code (project settings.json is shared; local overrides are not) ──
+.claude/settings.local.json
+
+# ── Deploy ──────────────────────────────────────────
+.vercel
