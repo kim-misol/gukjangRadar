@@ -1,0 +1,551 @@
+openapi: 3.1.0
+info:
+  title: 국장레이더 API
+  version: 1.0.0
+  description: |
+    뉴스와 국내 상장 종목의 연결을 탐색하는 API.
+    모든 점수는 '연결 강도'이며 미래 수익률 예측이 아니다.
+    타입 정의 원본은 spec/types.ts.
+servers:
+  - url: https://api.gukjang-radar.kr
+  - url: http://localhost:3000/api
+
+tags:
+  - name: home
+  - name: news
+  - name: stocks
+  - name: discovery
+  - name: search
+  - name: alerts
+  - name: feedback
+  - name: admin
+
+paths:
+  /v1/home:
+    get:
+      tags: [home]
+      summary: 홈 화면 한 방 조회 (5블록)
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date }, description: "미지정 시 최근 거래일" }
+      responses:
+        '200':
+          description: OK
+          headers:
+            Cache-Control: { schema: { type: string }, description: "public, s-maxage=60, stale-while-revalidate=300" }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Home' }
+
+  /v1/news:
+    get:
+      tags: [news]
+      summary: 뉴스 클러스터 목록
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [heat, latest, connection], default: heat }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/NewsCluster' } }
+                  nextCursor: { type: [string, 'null'] }
+
+  /v1/news/{clusterId}:
+    get:
+      tags: [news]
+      summary: 뉴스 상세 (요약 + 개체 + 상위 연결)
+      parameters: [ { $ref: '#/components/parameters/ClusterId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NewsCluster' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/news/{clusterId}/connections:
+    get:
+      tags: [news]
+      summary: 이 뉴스에 걸린 연결 전체
+      parameters:
+        - { $ref: '#/components/parameters/ClusterId' }
+        - name: type
+          in: query
+          description: 콤마 구분 connection_type 필터
+          schema: { type: string }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [connection, market, business], default: connection }
+        - { name: businessOnly, in: query, schema: { type: boolean, default: false } }
+        - { name: includeMeme, in: query, schema: { type: boolean, default: true } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+
+  /v1/news/{clusterId}/graph:
+    get:
+      tags: [news]
+      summary: 연결 그래프 (제품 핵심)
+      parameters:
+        - { $ref: '#/components/parameters/ClusterId' }
+        - { name: maxNodes, in: query, schema: { type: integer, default: 60, maximum: 200 } }
+        - { name: minScore, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Graph' } } } }
+
+  /v1/stocks/{ticker}:
+    get:
+      tags: [stocks]
+      summary: 종목 기본 정보 + 시장 반응
+      parameters: [ { $ref: '#/components/parameters/Ticker' } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [company, market]
+                properties:
+                  company: { $ref: '#/components/schemas/CompanyBrief' }
+                  market:  { $ref: '#/components/schemas/MarketReaction' }
+                  spark:
+                    type: array
+                    description: 최근 5거래일 종가 (캔들 아님)
+                    items: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/stocks/{ticker}/connections:
+    get:
+      tags: [stocks]
+      summary: 역방향 - 이 종목에 걸린 뉴스 연결
+      parameters:
+        - { $ref: '#/components/parameters/Ticker' }
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: days, in: query, schema: { type: integer, default: 1, maximum: 30 } }
+      responses:
+        '200':
+          description: 연결이 없으면 빈 배열. 억지로 만들지 않는다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+
+  /v1/discovery/meme:
+    get:
+      tags: [discovery]
+      summary: 오늘의 억지 관련주 랭킹
+      parameters:
+        - { name: date, in: query, schema: { type: string, format: date } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, maximum: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/MemeRankItem' } }
+
+  /v1/discovery/requests:
+    post:
+      tags: [discovery]
+      summary: 사용자 키워드 제보 (공개 탐색 큐에 등록)
+      description: |
+        1:1 응답을 하지 않는다. 결과는 공개 피드에만 노출된다. (PRD D2)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keyword]
+              properties:
+                keyword: { type: string, maxLength: 40 }
+      responses:
+        '202':
+          description: 큐 등록됨
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestId: { type: integer }
+                  status: { type: string, enum: [PENDING] }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /v1/search:
+    get:
+      tags: [search]
+      summary: 통합 검색
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [all, news, company, keyword], default: all }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  news:      { type: array, items: { $ref: '#/components/schemas/NewsCluster' } }
+                  companies: { type: array, items: { $ref: '#/components/schemas/CompanyBrief' } }
+                  entities:  { type: array, items: { $ref: '#/components/schemas/EntityBrief' } }
+                  suggestions: { type: array, items: { type: string } }
+
+  /v1/alerts:
+    get:
+      tags: [alerts]
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AlertKeyword' } }
+    post:
+      tags: [alerts]
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keyword]
+              properties:
+                keyword: { type: string, maxLength: 30 }
+                minScore: { type: integer, default: 60, minimum: 0, maximum: 100 }
+                includeMeme: { type: boolean, default: true }
+      responses:
+        '201': { description: 생성, content: { application/json: { schema: { $ref: '#/components/schemas/AlertKeyword' } } } }
+        '409': { description: 이미 등록된 키워드 }
+        '402': { description: 무료 플랜 키워드 한도 초과 }
+
+  /v1/alerts/{alertId}:
+    delete:
+      tags: [alerts]
+      security: [ { bearerAuth: [] } ]
+      parameters: [ { name: alertId, in: path, required: true, schema: { type: integer } } ]
+      responses: { '204': { description: 삭제됨 } }
+
+  /v1/push/subscribe:
+    post:
+      tags: [alerts]
+      security: [ { bearerAuth: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint: { type: string }
+                keys:
+                  type: object
+                  required: [p256dh, auth]
+                  properties:
+                    p256dh: { type: string }
+                    auth: { type: string }
+      responses: { '201': { description: 구독 등록 } }
+
+  /v1/connections/{connectionId}/feedback:
+    post:
+      tags: [feedback]
+      summary: 연결 품질 피드백 (익명 허용)
+      parameters: [ { name: connectionId, in: path, required: true, schema: { type: integer } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [UNDERSTOOD, FARFETCHED, WRONG] }
+                anonId: { type: string, description: 비로그인 시 클라이언트 생성 UUID }
+      responses:
+        '204': { description: 반영됨 }
+        '409': { description: 이미 제출함 }
+
+  /v1/admin/review-queue:
+    get:
+      tags: [admin]
+      security: [ { bearerAuth: [] } ]
+      summary: 검수 대기 연결
+      parameters:
+        - { name: minScore, in: query, schema: { type: integer, default: 0 } }
+        - { name: onlyFlagged, in: query, schema: { type: boolean, default: true } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+
+  /v1/admin/connections/{connectionId}/review:
+    post:
+      tags: [admin]
+      security: [ { bearerAuth: [] } ]
+      parameters: [ { name: connectionId, in: path, required: true, schema: { type: integer } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [APPROVE, REJECT, CORRECT] }
+                reason: { type: string }
+                patch: { type: object, additionalProperties: true }
+      responses: { '204': { description: 처리됨 } }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    ClusterId:
+      name: clusterId
+      in: path
+      required: true
+      schema: { type: integer }
+    Ticker:
+      name: ticker
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[0-9]{6}$' }
+
+  responses:
+    NotFound:
+      description: 없음
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RateLimited:
+      description: 호출 한도 초과
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        detail: { type: object, additionalProperties: true }
+
+    CompanyBrief:
+      type: object
+      required: [id, ticker, name, market]
+      properties:
+        id: { type: integer }
+        ticker: { type: string }
+        name: { type: string }
+        market: { type: string, enum: [KOSPI, KOSDAQ, KONEX] }
+        sector: { type: [string, 'null'] }
+
+    EntityBrief:
+      type: object
+      required: [id, name, kind, importance]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        kind: { type: string, enum: [PERSON, ORG, PLACE, PRODUCT, EVENT, BRAND, WORD, TIME, NUMBER, OTHER] }
+        subtype: { type: [string, 'null'] }
+        importance: { type: number, minimum: 0, maximum: 1 }
+
+    Evidence:
+      type: object
+      required: [source, label]
+      properties:
+        rule: { type: string }
+        source: { type: string }
+        label: { type: string, description: 사용자에게 보여줄 근거 한 줄 }
+        url: { type: string }
+        docNo: { type: string }
+        fetchedAt: { type: string, format: date-time }
+
+    PathStep:
+      type: object
+      required: [nodeId, kind, label]
+      properties:
+        nodeId: { type: integer }
+        kind: { type: string, enum: [NEWS, ENTITY, CONCEPT, COMPANY] }
+        label: { type: string }
+        edgeType: { type: string }
+        edgeLabel: { type: string }
+        evidenceUrl: { type: string }
+
+    ConnectionScores:
+      type: object
+      description: 모두 0~100. connection 은 '연결 강도'이며 수익률 예측이 아니다.
+      required: [businessRelevance, keywordMatch, supplyChain, marketReaction, meme, confidence, connection]
+      properties:
+        businessRelevance: { type: integer }
+        keywordMatch: { type: integer }
+        supplyChain: { type: integer }
+        marketReaction: { type: integer }
+        meme: { type: integer }
+        confidence: { type: integer }
+        connection: { type: integer }
+
+    MarketReaction:
+      type: object
+      required: [capturedAt, isDelayed]
+      properties:
+        capturedAt: { type: string, format: date-time }
+        isDelayed: { type: boolean }
+        price: { type: [integer, 'null'] }
+        changePct: { type: [number, 'null'] }
+        volume: { type: [integer, 'null'] }
+        volumeRatio20: { type: [number, 'null'] }
+
+    Connection:
+      type: object
+      required: [id, clusterId, company, type, scores, relevanceBand, path, hopCount, explanation, status, isMeme]
+      properties:
+        id: { type: integer }
+        clusterId: { type: integer }
+        company: { $ref: '#/components/schemas/CompanyBrief' }
+        type: { type: string, enum: [DIRECT, SUPPLY_CHAIN, THEME, PERSON, PRODUCT, LOCATION, EVENT, KEYWORD, NAME_MATCH, AFFILIATION, MEME] }
+        scores: { $ref: '#/components/schemas/ConnectionScores' }
+        relevanceBand: { type: string, enum: [HIGH, MEDIUM, LOW, NONE] }
+        path: { type: array, items: { $ref: '#/components/schemas/PathStep' } }
+        hopCount: { type: integer }
+        explanation: { type: string }
+        caution: { type: [string, 'null'] }
+        counterEvidence: { type: [string, 'null'] }
+        market: { oneOf: [ { $ref: '#/components/schemas/MarketReaction' }, { type: 'null' } ] }
+        dataSources: { type: array, items: { $ref: '#/components/schemas/Evidence' } }
+        status: { type: string, enum: [PENDING, ACTIVE, DISPUTED, REJECTED, CORRECTED] }
+        isMeme: { type: boolean }
+
+    NewsCluster:
+      type: object
+      required: [id, headline, tradeDate, articleCount, analysisStatus, representativeUrl]
+      properties:
+        id: { type: integer }
+        headline: { type: string }
+        emoji: { type: [string, 'null'] }
+        aiSummary: { type: [string, 'null'], description: 3문장. 원문 인용 20자 초과 금지. }
+        tradeDate: { type: string, format: date }
+        firstSeenAt: { type: string, format: date-time }
+        articleCount: { type: integer }
+        heatScore: { type: number }
+        analysisStatus: { type: string, enum: [PENDING, RUNNING, DONE, FAILED, SKIPPED] }
+        representativeUrl: { type: string }
+        sources:
+          type: array
+          items:
+            type: object
+            properties: { name: { type: string }, url: { type: string } }
+        entities: { type: array, items: { $ref: '#/components/schemas/EntityBrief' } }
+        topConnections: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+        pathPreviews: { type: array, items: { type: string }, maxItems: 2 }
+
+    Graph:
+      type: object
+      required: [clusterId, nodes, edges, textPaths, truncated]
+      properties:
+        clusterId: { type: integer }
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, kind, refId, label, lane]
+            properties:
+              id: { type: integer }
+              kind: { type: string, enum: [NEWS, ENTITY, CONCEPT, COMPANY] }
+              refId: { type: integer }
+              label: { type: string }
+              ticker: { type: string }
+              entityKind: { type: string }
+              lane: { type: integer, enum: [0, 1, 2, 3] }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [id, src, dst, type, weight, confidence, label]
+            properties:
+              id: { type: integer }
+              src: { type: integer }
+              dst: { type: integer }
+              type: { type: string }
+              weight: { type: number }
+              confidence: { type: number }
+              label: { type: string }
+              evidence: { oneOf: [ { $ref: '#/components/schemas/Evidence' }, { type: 'null' } ] }
+        textPaths:
+          type: array
+          description: 그래프 미지원 환경/스크린리더/SEO 폴백
+          items: { type: string }
+        truncated: { type: boolean }
+
+    MemeRankItem:
+      type: object
+      required: [rank, connection, arrowLabel, comment]
+      properties:
+        rank: { type: integer }
+        connection: { $ref: '#/components/schemas/Connection' }
+        arrowLabel: { type: string, example: "원희 → 원익" }
+        comment: { type: string }
+        shareImageUrl: { type: string }
+
+    MoverItem:
+      type: object
+      required: [company, market]
+      properties:
+        company: { $ref: '#/components/schemas/CompanyBrief' }
+        market: { $ref: '#/components/schemas/MarketReaction' }
+        connection:
+          description: 설명 가능한 연결이 없으면 null
+          oneOf: [ { $ref: '#/components/schemas/Connection' }, { type: 'null' } ]
+
+    AlertKeyword:
+      type: object
+      required: [id, keyword, minScore, includeMeme, isActive]
+      properties:
+        id: { type: integer }
+        keyword: { type: string }
+        minScore: { type: integer }
+        includeMeme: { type: boolean }
+        isActive: { type: boolean }
+
+    Home:
+      type: object
+      required: [tradeDate, memeRank, clusters, movers, recentConnections, marketAsOf, isPreMarket]
+      properties:
+        tradeDate: { type: string, format: date }
+        memeRank: { type: array, items: { $ref: '#/components/schemas/MemeRankItem' } }
+        clusters: { type: array, items: { $ref: '#/components/schemas/NewsCluster' } }
+        movers: { type: array, items: { $ref: '#/components/schemas/MoverItem' } }
+        recentConnections: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+        marketAsOf: { type: string, format: date-time }
+        isPreMarket: { type: boolean }

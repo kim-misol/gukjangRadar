@@ -1,0 +1,88 @@
+{
+  "version": "sc-v1",
+  "note": "가중치를 코드에 하드코딩하지 말 것. packages/core/scoring 이 이 파일을 읽는다.",
+
+  "profiles": {
+    "BUSINESS": {
+      "appliesTo": ["DIRECT", "SUPPLY_CHAIN", "THEME", "PERSON", "PRODUCT", "LOCATION", "EVENT", "AFFILIATION"],
+      "weights": {
+        "businessRelevance": 0.40,
+        "keywordMatch": 0.20,
+        "supplyChain": 0.15,
+        "marketReaction": 0.15,
+        "meme": 0.10
+      }
+    },
+    "NOMINAL": {
+      "appliesTo": ["NAME_MATCH", "KEYWORD", "MEME"],
+      "note": "이름·밈 연결에 BUSINESS 가중치를 쓰면 점수가 0 근처로 눌려 노루페인트가 잡음보다 아래로 간다. 별도 프로파일이 필요하다.",
+      "weights": {
+        "keywordMatch": 0.45,
+        "marketReaction": 0.30,
+        "meme": 0.15,
+        "businessRelevance": 0.05,
+        "supplyChain": 0.05
+      }
+    }
+  },
+
+  "confidenceFactor": { "base": 0.6, "span": 0.4 },
+  "hopDecay": { "perHop": 0.08, "floor": 0.70 },
+
+  "caps": {
+    "noEvidenceEdge": 60,
+    "unreviewedHighScore": 95,
+    "ambiguousAlias": 80,
+    "memeBusinessRelevance": 30
+  },
+
+  "keywordMatch": {
+    "exactAlias": 100,
+    "aliasTypeMultiplier": {
+      "OFFICIAL": 1.0, "SHORT": 0.95, "BRAND": 0.9, "TICKER": 1.0,
+      "ENGLISH": 0.85, "FORMER": 0.7, "NICKNAME": 0.6
+    },
+    "jamoSimilarityFloor": 0.60,
+    "firstSyllableBonus": 12,
+    "ambiguousAliasPenalty": 25,
+    "lengthPenalty": { "minLen": 2, "penaltyUnderMinLen": 40 }
+  },
+
+  "marketReaction": {
+    "volumeWeight": 0.6,
+    "priceWeight": 0.4,
+    "volumeLogBase": 2,
+    "volumeCoef": 25,
+    "volumeIntercept": 50,
+    "priceCoef": 2.5,
+    "priceIntercept": 50,
+    "useAbsolutePriceChange": true,
+    "nullValue": 0,
+    "note": "시세가 없으면(장 시작 전·거래정지) 0이 아니라 null 로 두고 프로파일 가중치를 재정규화한다."
+  },
+
+  "meme": {
+    "llmWeight": 0.5,
+    "inverseBusinessWeight": 0.3,
+    "marketReactionWeight": 0.2,
+    "memeTypeFloor": 50
+  },
+
+  "relevanceBand": { "HIGH": 70, "MEDIUM": 40, "LOW": 15 },
+
+  "display": {
+    "chipColorByBusinessRelevance": { "green": 60, "blue": 30, "gray": 0 },
+    "memeRankMinScore": 55,
+    "memeRankMinMarketReaction": 40,
+    "alertDefaultMinScore": 60
+  },
+
+  "reviewTriggers": {
+    "businessRelevanceAtLeast": 80,
+    "connectionScoreAtLeast": 90,
+    "memeScoreAtLeast": 90,
+    "hopCountAtLeast": 4,
+    "ambiguousAlias": true,
+    "counterCheckRefuted": true
+  }
+}
