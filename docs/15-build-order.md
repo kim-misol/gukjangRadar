@@ -3,16 +3,39 @@
 > 전제: 1인 개발 + 코딩 에이전트. 주 25~30시간.
 > 원칙: **가장 무서운 것부터 만든다.** 예쁜 화면은 마지막이다.
 
-## W1 — 기반과 안전장치
+## W1 — 기반과 안전장치 ✅ 완료 (2026-08-20)
 E0 전체.
 주말까지: `pnpm dev` 기동, 마이그레이션 성공, 금지어 린터가 CI에서 커밋을 막는다.
 > 금지어 린터를 1주차에 넣는 이유: 나중에 넣으면 이미 쌓인 카피를 다 고쳐야 한다.
 
-## W2 — 기업 데이터와 이름 인덱스
+**진행 기록**: pnpm workspace+Turborepo 스캐폴드(apps/web, apps/worker, packages/core,
+packages/db), spec/를 워크스페이스 패키지로 승격, zod env 검증, Drizzle로 schema.sql
+22테이블 번역 + 마이그레이션 up/down/seed(기업 20+뉴스 5) 실제 postgres에서 검증,
+금지어 가드레일(순수 함수 + CI 린터, D3 고지 문구는 안전 문구 allowlist), GitHub Actions CI.
+클린 설치부터 lint/typecheck/test/build 전부 통과, `pnpm dev`로 web(3000)/worker(4000)
+동시 기동 확인. 상세 기록: 프로젝트 문서 `progress/w1-status.md`.
+
+## W2 — 기업 데이터와 이름 인덱스 ✅ 완료 (2026-08-20)
 E1.1 + E1.2(T1.2.1~1.2.3).
 **이 주가 프로젝트의 성패를 가른다.** 별칭 인덱스와 자모 유사도가 부실하면 이 서비스는 존재 이유가 없다.
 검증: 콘솔 스크립트로 `노루` → 노루페인트/노루홀딩스, `원희` → 원익 후보가 나오는지 확인.
 아직 LLM은 한 줄도 안 붙였는데 **핵심 마법이 이미 동작해야 한다.**
+
+**진행 기록**: 이름 정규화/자모 분해/자모 유사도(packages/core/src/normalize)와 별칭 생성·모호
+별칭 판별(packages/core/src/alias)로 company_alias 실데이터(기업 20개, 별칭 46개)를 채우고,
+`pnpm verify-name-index`로 W2 게이트를 실제 로컬 postgres에서 확인: "노루" → 노루홀딩스
+(ALIAS_EXACT, SHORT별칭)·노루페인트(ALIAS_PREFIX), "원희" → 원익IPS/원익홀딩스(자모유사도
+0.6 미만이지만 첫 음절 공유로 ALIAS_PREFIX 병합) — docs/09 §2 규칙 그대로 재현됨.
+OpenDART 클라이언트(T1.2.1)·business_summary 생성+캐시(T1.2.2)·최대주주 기반 AFFILIATION
+엣지(T1.2.3)까지 구현. company에 business_summary/business_summary_updated_at 컬럼 추가
+(마이그레이션 0001). 샌드박스 네트워크가 OpenDART를 막고 있어(KRX/도커허브도 막힘 — W1 기록
+참조) 실제 API 응답으로 검증하진 못했지만, `pnpm manual-verify-dart-sync`로 fake DART
+client + 실제 로컬 postgres를 붙여 전체 파이프라인을 실행 확인: business_summary 생성·캐시
+동작(2회차 실행 시 재조회 0건), docs/06-erd.md §3 예시(노루페인트→노루홀딩스, type=AFFILIATION,
+evidence={"source":"DART",...})를 그대로 재현하는 graph_edge 실제 생성 확인.
+클린 typecheck/lint/test(60개)/build/check-enum-sync/lint-forbidden-words/format:check 전부
+통과. 실 API 키·네트워크가 있는 환경에서 DartClient/KrxListingClient 라이브 실행 재검증 필요.
+상세 기록: 프로젝트 문서 `progress/w2-status.md`.
 
 ## W3 — 뉴스 수집과 클러스터링
 E2.1.

@@ -96,6 +96,9 @@ export const company = pgTable(
     isSpac: boolean('is_spac').notNull().default(false),
     isHolding: boolean('is_holding').notNull().default(false),
     marketCap: bigint('market_cap', { mode: 'number' }),
+    // T1.2.2: DART 기업개황 기반 1~2문장 요약. LLM 없이 결정론적 템플릿으로 생성(+캐시).
+    businessSummary: text('business_summary'),
+    businessSummaryUpdatedAt: timestamp('business_summary_updated_at', { withTimezone: true }),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

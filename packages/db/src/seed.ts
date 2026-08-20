@@ -1,21 +1,19 @@
 /**
- * T0.2.3 — 개발용 시드 스크립트: 더미 뉴스 5건 + 기업 20개.
+ * T0.2.3/T1.1.1 — 개발용 시드 스크립트: 더미 뉴스 5건 + 기업 20개 + 별칭 인덱스.
  * 실행: pnpm db:seed
  *
- * 주의: name_norm/name_jamo 정규화는 아직 T1.1.2(정식 유틸)가 없으므로
- * 여기서는 임시 placeholder 정규화만 쓴다. T1.1.2가 만들어지면 이 파일도
- * `normalizeName`/`toJamo`를 import해서 다시 시드할 것.
+ * T1.1.2(자모 정규화/유사도)·T1.1.3(별칭 생성)이 준비됐으므로 임시 placeholder
+ * 정규화(tempNormalize)는 걷어내고 `normalizeName`/`toJamo`/`generateAliasCandidates`를
+ * 그대로 써서 company_alias까지 실데이터로 채운다. W2 게이트 검증
+ * (노루→노루페인트/노루홀딩스, 원희→원익 후보)에 필요한 englishName/formerNames가
+ * 있는 회사는 해당 필드를 채워 둔다.
  */
-import { loadEnv } from '@gukjang/core';
+import { loadEnv, generateAliasCandidates, normalizeName, toJamo } from '@gukjang/core';
+import type { CompanyAliasInput } from '@gukjang/core';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
-
-// 임시 정규화 (T1.1.2 도입 전까지만 사용)
-function tempNormalize(name: string): string {
-  return name.replace(/\s+/g, '').toLowerCase();
-}
 
 interface SeedCompany {
   ticker: string;
@@ -23,13 +21,46 @@ interface SeedCompany {
   market: (typeof schema.marketKind.enumValues)[number];
   sector?: string;
   isHolding?: boolean;
+  englishName?: string;
+  formerNames?: string[];
+  brandNames?: string[];
+  /**
+   * OpenDART 고유번호. 개발 시드용 placeholder만 넣는다 — 샌드박스 네트워크가
+   * DART를 막고 있어(W1/W2 기록 참조) 실제 등록번호로 검증하지 못했다.
+   * T1.2.2/1.2.3(business_summary/AFFILIATION) 수동 검증을 위해 일부 회사에만 채운다.
+   */
+  corpCode?: string;
 }
 
 const SEED_COMPANIES: SeedCompany[] = [
-  { ticker: '005930', name: '삼성전자', market: 'KOSPI', sector: '전기전자' },
-  { ticker: '000660', name: 'SK하이닉스', market: 'KOSPI', sector: '전기전자' },
-  { ticker: '090350', name: '노루페인트', market: 'KOSPI', sector: '화학' },
-  { ticker: '000320', name: '노루홀딩스', market: 'KOSPI', sector: '기타금융', isHolding: true },
+  {
+    ticker: '005930',
+    name: '삼성전자',
+    market: 'KOSPI',
+    sector: '전기전자',
+    englishName: 'Samsung Electronics',
+  },
+  {
+    ticker: '000660',
+    name: 'SK하이닉스',
+    market: 'KOSPI',
+    sector: '전기전자',
+    englishName: 'SK Hynix',
+    // A6: 구사명 — docs/12-edge-cases.md §A6
+    formerNames: ['하이닉스반도체'],
+    corpCode: '10000003',
+  },
+  { ticker: '090350', name: '노루페인트', market: 'KOSPI', sector: '화학', corpCode: '10000001' },
+  {
+    ticker: '000320',
+    name: '노루홀딩스',
+    market: 'KOSPI',
+    sector: '기타금융',
+    isHolding: true,
+    // docs/06-erd.md §3 예시의 corp_code(00126380)는 이 회사(노루홀딩스) 것 —
+    // 마찬가지로 실 검증 전 placeholder.
+    corpCode: '00126380',
+  },
   { ticker: '240810', name: '원익IPS', market: 'KOSDAQ', sector: '반도체장비' },
   { ticker: '049800', name: '원익홀딩스', market: 'KOSDAQ', sector: '기타금융', isHolding: true },
   { ticker: '373220', name: 'LG에너지솔루션', market: 'KOSPI', sector: '전기전자' },
@@ -42,6 +73,7 @@ const SEED_COMPANIES: SeedCompany[] = [
   { ticker: '207940', name: '삼성바이오로직스', market: 'KOSPI', sector: '의약품' },
   { ticker: '051910', name: 'LG화학', market: 'KOSPI', sector: '화학' },
   { ticker: '215600', name: '신라젠', market: 'KOSDAQ', sector: '의약품' },
+  // A1: 흔한 명사형 회사명 — docs/12-edge-cases.md §A1
   { ticker: '009240', name: '한샘', market: 'KOSPI', sector: '유통업' },
   { ticker: '003490', name: '대한항공', market: 'KOSPI', sector: '운수창고업' },
   { ticker: '086520', name: '에코프로', market: 'KOSDAQ', sector: '화학', isHolding: true },
@@ -95,21 +127,60 @@ async function main(): Promise<void> {
 
   console.log('시드 시작…');
 
+  let aliasCount = 0;
+
   await db.transaction(async (tx) => {
-    // 기업
+    // 기업 + 별칭 인덱스 (T1.1.1/T1.1.3)
     for (const c of SEED_COMPANIES) {
-      await tx
+      const nameNorm = normalizeName(c.name);
+      const [row] = await tx
         .insert(schema.company)
         .values({
           ticker: c.ticker,
           name: c.name,
-          nameNorm: tempNormalize(c.name),
-          nameJamo: tempNormalize(c.name),
+          nameNorm,
+          nameJamo: toJamo(nameNorm),
           market: c.market,
           sector: c.sector,
           isHolding: c.isHolding ?? false,
+          corpCode: c.corpCode,
         })
-        .onConflictDoNothing({ target: schema.company.ticker });
+        .onConflictDoUpdate({
+          target: schema.company.ticker,
+          set: { name: c.name, nameNorm, nameJamo: toJamo(nameNorm), corpCode: c.corpCode },
+        })
+        .returning({ id: schema.company.id });
+      if (!row) throw new Error(`기업 upsert 실패: ${c.name}`);
+
+      const aliasInput: CompanyAliasInput = {
+        name: c.name,
+        ticker: c.ticker,
+        englishName: c.englishName,
+        formerNames: c.formerNames,
+        brandNames: c.brandNames,
+        isHolding: c.isHolding,
+      };
+      for (const a of generateAliasCandidates(aliasInput)) {
+        await tx
+          .insert(schema.companyAlias)
+          .values({
+            companyId: row.id,
+            alias: a.alias,
+            aliasNorm: a.aliasNorm,
+            aliasJamo: a.aliasJamo,
+            aliasType: a.aliasType,
+            isAmbiguous: a.isAmbiguous,
+            source: 'seed',
+          })
+          .onConflictDoNothing({
+            target: [
+              schema.companyAlias.companyId,
+              schema.companyAlias.aliasNorm,
+              schema.companyAlias.aliasType,
+            ],
+          });
+        aliasCount++;
+      }
     }
 
     // 뉴스 소스
@@ -178,7 +249,9 @@ async function main(): Promise<void> {
     }
   });
 
-  console.log(`✓ 시드 완료: 기업 ${SEED_COMPANIES.length}개, 뉴스 ${SEED_NEWS.length}건`);
+  console.log(
+    `✓ 시드 완료: 기업 ${SEED_COMPANIES.length}개, 별칭 ${aliasCount}개, 뉴스 ${SEED_NEWS.length}건`,
+  );
   await pgClient.end();
 }
 

@@ -53,9 +53,9 @@ apps/web  apps/worker  packages/core  packages/db  spec/  docs/
 2. **Green** — 테스트를 통과시키는 최소 구현만 한다. 앞서가서 다음 기능까지 만들지 않는다.
 3. **Refactor** — 테스트가 초록인 상태를 유지하며 정리한다. 테스트 자체는 동작이 바뀌는 게 아니면 건드리지 않는다.
 
-- 테스트 실행: `pnpm test`(전체) 또는 `pnpm --filter <pkg> test`(해당 워크스페이스만, 예: `@gukjang/core`).
-- 커밋 전에 로컬에서 CI와 동일한 게이트를 순서대로 통과시킨다:
-  `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm check-enum-sync && pnpm lint-forbidden-words`
+- 테스트 실행: `make test`(전체) 또는 `pnpm --filter <pkg> test`(해당 워크스페이스만, 예: `@gukjang/core`).
+- 커밋 전에 로컬에서 CI와 동일한 게이트를 통과시킨다: `make ci`
+  (format-check → lint → typecheck → test → check-enum-sync → lint-forbidden-words, `.github/workflows/ci.yml`과 동일 순서).
 - 커밋 메시지:
   - 제목: `type(scope): 요약` (`type` = `feat|fix|refactor|test|chore|docs`, `scope` = 주차 예: `W1` 또는 패키지명)
   - 본문: 변경 사항을 불릿으로, 마지막 줄에 `DoD verified: ...`로 무엇을 어떻게 확인했는지 남긴다(테스트 통과만으로 부족하면 수동 확인 내용도 적는다).

@@ -27,20 +27,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 아래 스텝들은 Makefile 타깃을 그대로 호출한다 — 로컬 `make ci`와 항상 같은 순서·같은 명령을 쓴다.
       - name: Format check
-        run: pnpm format:check
+        run: make format-check
 
       - name: Lint (R5 금지어 린터 포함)
-        run: pnpm lint
+        run: make lint
 
       - name: Typecheck
-        run: pnpm typecheck
+        run: make typecheck
 
       - name: Test
-        run: pnpm test
+        run: make test
 
       - name: Enum sync (spec/schema.sql ↔ spec/types.ts)
-        run: pnpm check-enum-sync
+        run: make check-enum-sync
 
       - name: Forbidden words (R5 / docs/01-prd.md §7 D4)
-        run: pnpm lint-forbidden-words
+        run: make lint-forbidden-words

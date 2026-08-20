@@ -60,6 +60,9 @@ CREATE TABLE company (
   is_spac       boolean      NOT NULL DEFAULT false,
   is_holding    boolean      NOT NULL DEFAULT false,
   market_cap    bigint,
+  -- T1.2.2: DART 기업개황 기반 1~2문장 요약. LLM 없이 결정론적 템플릿으로 생성(+캐시).
+  business_summary            text,
+  business_summary_updated_at timestamptz,
   updated_at    timestamptz  NOT NULL DEFAULT now(),
   created_at    timestamptz  NOT NULL DEFAULT now()
 );

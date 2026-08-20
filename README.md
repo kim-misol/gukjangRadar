@@ -47,23 +47,23 @@ scripts/           CI 가드레일 (enum 동기화, 금지어 린터)
 ## 시작하기
 
 ```bash
-pnpm install
-cp .env.example .env        # ANTHROPIC_API_KEY, KIS_*, DART_API_KEY 등 채우기
-docker compose up -d        # postgres(pgvector) + redis
-pnpm db:migrate
-pnpm dev                    # web:3000, worker
+make setup    # Node 버전 확인 → .env 생성 → 의존성 설치 → 인프라 기동 → DB 마이그레이션
+make dev      # web:3000, worker:4000
 ```
+`make setup`이 채워주지 않는 건 `.env`의 `ANTHROPIC_API_KEY`, `KIS_APP_KEY/SECRET`, `DART_API_KEY` — 비워도 부팅은 되지만 해당 기능은 동작하지 않는다.
 
-### 주요 스크립트
+### Makefile
+
+로컬 개발과 CI(`.github/workflows/ci.yml`)가 **같은 타깃**을 쓴다. 전체 목록은 `make help`.
 
 | 명령 | 설명 |
 |---|---|
-| `pnpm dev` | 전체 앱 개발 서버 (Turborepo) |
-| `pnpm build` / `pnpm test` / `pnpm typecheck` / `pnpm lint` | 전체 워크스페이스 |
-| `pnpm db:generate` / `db:migrate` / `db:seed` / `db:reset` | Drizzle 마이그레이션 |
-| `pnpm check-enum-sync` | `spec/schema.sql` ↔ `spec/types.ts` enum 동기화 검증 |
-| `pnpm lint-forbidden-words` | R5 금지어 CI 가드레일 |
-| `pnpm format` / `format:check` | Prettier |
-
-CI([`​.github/workflows/ci.yml`](./.github/workflows/ci.yml))는 format → lint → typecheck → test → enum-sync → forbidden-words 순으로 돈다.
+| `make dev` / `make web` / `make worker` | 개발 서버 (전체 / web만 / worker만) |
+| `make up` / `make down` | postgres(pgvector) + redis (docker compose) |
+| `make build` / `make typecheck` / `make lint` / `make format` | 빌드 & 품질 |
+| `make test` / `make test-cov` | 유닛 테스트 (전체 / 커버리지 포함) |
+| `make check-enum-sync` / `make lint-forbidden-words` | CLAUDE.md 절대 규칙 가드레일 |
+| `make ci` | 위 게이트 전부를 CI와 같은 순서로 로컬 실행. 커밋 전에 이걸로 먼저 확인한다 |
+| `make db-generate` / `db-migrate` / `db-seed` / `db-reset` | Drizzle 마이그레이션 |
+| `make clean` | 빌드 캐시(`dist`, `.turbo`, `.next`, `coverage`) 정리 |
 

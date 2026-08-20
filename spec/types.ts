@@ -14,26 +14,59 @@ export const NODE_KINDS = ['NEWS', 'ENTITY', 'CONCEPT', 'COMPANY'] as const;
 export type NodeKind = (typeof NODE_KINDS)[number];
 
 export const ENTITY_KINDS = [
-  'PERSON', 'ORG', 'PLACE', 'PRODUCT', 'EVENT', 'BRAND', 'WORD', 'TIME', 'NUMBER', 'OTHER',
+  'PERSON',
+  'ORG',
+  'PLACE',
+  'PRODUCT',
+  'EVENT',
+  'BRAND',
+  'WORD',
+  'TIME',
+  'NUMBER',
+  'OTHER',
 ] as const;
 export type EntityKind = (typeof ENTITY_KINDS)[number];
 
 export const ALIAS_KINDS = [
-  'OFFICIAL', 'SHORT', 'ENGLISH', 'FORMER', 'BRAND', 'TICKER', 'NICKNAME',
+  'OFFICIAL',
+  'SHORT',
+  'ENGLISH',
+  'FORMER',
+  'BRAND',
+  'TICKER',
+  'NICKNAME',
 ] as const;
 export type AliasKind = (typeof ALIAS_KINDS)[number];
 
 /** 그래프 엣지 = 세상에 대한 사실 */
 export const EDGE_KINDS = [
-  'MENTIONS', 'NAME_MATCH', 'NAME_SIMILAR', 'AFFILIATION', 'SUPPLY_CHAIN',
-  'PRODUCES', 'BELONGS_TO', 'RELATED_CONCEPT', 'PERSON_OF', 'LOCATED_IN', 'EVENT_IMPACT',
+  'MENTIONS',
+  'NAME_MATCH',
+  'NAME_SIMILAR',
+  'AFFILIATION',
+  'SUPPLY_CHAIN',
+  'PRODUCES',
+  'BELONGS_TO',
+  'RELATED_CONCEPT',
+  'PERSON_OF',
+  'LOCATED_IN',
+  'EVENT_IMPACT',
 ] as const;
 export type EdgeKind = (typeof EDGE_KINDS)[number];
 
 /** 연결 = 특정 뉴스에 대한 해석 결과 (사용자에게 보이는 유형) */
 export const CONNECTION_KINDS = [
-  'DIRECT', 'SUPPLY_CHAIN', 'THEME', 'PERSON', 'PRODUCT', 'LOCATION',
-  'EVENT', 'KEYWORD', 'NAME_MATCH', 'AFFILIATION', 'MEME',
+  'DIRECT',
+  'SUPPLY_CHAIN',
+  'THEME',
+  'PERSON',
+  'PRODUCT',
+  'LOCATION',
+  'EVENT',
+  'KEYWORD',
+  'NAME_MATCH',
+  'AFFILIATION',
+  'MEME',
 ] as const;
 export type ConnectionKind = (typeof CONNECTION_KINDS)[number];
 
@@ -42,23 +75,29 @@ export const CONNECTION_KIND_META: Record<
   ConnectionKind,
   { label: string; icon: string; countsAsBusiness: boolean }
 > = {
-  DIRECT:       { label: '사업 직접 연관', icon: '🎯', countsAsBusiness: true },
-  SUPPLY_CHAIN: { label: '공급망',        icon: '🔗', countsAsBusiness: true },
-  THEME:        { label: '테마',          icon: '🌊', countsAsBusiness: true },
-  PERSON:       { label: '인물',          icon: '👤', countsAsBusiness: true },
-  PRODUCT:      { label: '제품',          icon: '📦', countsAsBusiness: true },
-  LOCATION:     { label: '지역',          icon: '📍', countsAsBusiness: true },
-  EVENT:        { label: '행사·이슈',     icon: '📅', countsAsBusiness: true },
-  AFFILIATION:  { label: '계열 관계',     icon: '🏢', countsAsBusiness: true },
-  KEYWORD:      { label: '키워드',        icon: '🔤', countsAsBusiness: false },
-  NAME_MATCH:   { label: '이름 일치',     icon: '🔤', countsAsBusiness: false },
-  MEME:         { label: '밈성 연결',     icon: '😂', countsAsBusiness: false },
+  DIRECT: { label: '사업 직접 연관', icon: '🎯', countsAsBusiness: true },
+  SUPPLY_CHAIN: { label: '공급망', icon: '🔗', countsAsBusiness: true },
+  THEME: { label: '테마', icon: '🌊', countsAsBusiness: true },
+  PERSON: { label: '인물', icon: '👤', countsAsBusiness: true },
+  PRODUCT: { label: '제품', icon: '📦', countsAsBusiness: true },
+  LOCATION: { label: '지역', icon: '📍', countsAsBusiness: true },
+  EVENT: { label: '행사·이슈', icon: '📅', countsAsBusiness: true },
+  AFFILIATION: { label: '계열 관계', icon: '🏢', countsAsBusiness: true },
+  KEYWORD: { label: '키워드', icon: '🔤', countsAsBusiness: false },
+  NAME_MATCH: { label: '이름 일치', icon: '🔤', countsAsBusiness: false },
+  MEME: { label: '밈성 연결', icon: '😂', countsAsBusiness: false },
 };
 
 export const EDGE_ORIGINS = ['RULE', 'DART', 'DICTIONARY', 'LLM', 'HUMAN', 'MARKET'] as const;
 export type EdgeOrigin = (typeof EDGE_ORIGINS)[number];
 
-export const CONNECTION_STATES = ['PENDING', 'ACTIVE', 'DISPUTED', 'REJECTED', 'CORRECTED'] as const;
+export const CONNECTION_STATES = [
+  'PENDING',
+  'ACTIVE',
+  'DISPUTED',
+  'REJECTED',
+  'CORRECTED',
+] as const;
 export type ConnectionState = (typeof CONNECTION_STATES)[number];
 
 export const ANALYSIS_STATES = ['PENDING', 'RUNNING', 'DONE', 'FAILED', 'SKIPPED'] as const;
@@ -105,9 +144,9 @@ export interface GraphEdgeDto {
   src: number;
   dst: number;
   type: EdgeKind;
-  weight: number;      // 0~1
-  confidence: number;  // 0~1
-  label: string;       // 템플릿 생성 (LLM 아님)
+  weight: number; // 0~1
+  confidence: number; // 0~1
+  label: string; // 템플릿 생성 (LLM 아님)
   evidence: Evidence | null;
 }
 
@@ -244,8 +283,14 @@ export interface Candidate {
   entityId: number;
   /** 후보를 만든 결정론적 룰 */
   recallRule:
-    | 'ALIAS_EXACT' | 'ALIAS_JAMO_SIMILAR' | 'ALIAS_PREFIX'
-    | 'THEME_DICT' | 'GRAPH_EXPAND' | 'SUPPLY_DICT' | 'PERSON_DICT' | 'EMBEDDING';
+    | 'ALIAS_EXACT'
+    | 'ALIAS_JAMO_SIMILAR'
+    | 'ALIAS_PREFIX'
+    | 'THEME_DICT'
+    | 'GRAPH_EXPAND'
+    | 'SUPPLY_DICT'
+    | 'PERSON_DICT'
+    | 'EMBEDDING';
   recallScore: number; // 0~1
   path: PathStep[];
   hopCount: number;

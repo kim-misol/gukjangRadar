@@ -10,10 +10,13 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
+    "test:cov": "turbo run test:cov",
     "lint": "turbo run lint && eslint scripts",
     "typecheck": "turbo run typecheck",
     "check-enum-sync": "tsx scripts/check-enum-sync.ts",
     "lint-forbidden-words": "tsx scripts/lint-forbidden-words.ts",
+    "verify-name-index": "tsx scripts/verify-name-index.ts",
+    "manual-verify-dart-sync": "tsx scripts/manual-verify-dart-sync.ts",
     "db:generate": "pnpm --filter @gukjang/db generate",
     "db:migrate": "pnpm --filter @gukjang/db migrate",
     "db:reset": "pnpm --filter @gukjang/db reset",
@@ -23,7 +26,9 @@
   },
   "dependencies": {
     "@gukjang/core": "workspace:*",
+    "@gukjang/db": "workspace:*",
     "@gukjang/spec": "workspace:*",
+    "drizzle-orm": "^0.36.4",
     "fast-glob": "^3.3.2"
   },
   "devDependencies": {
@@ -35,7 +40,8 @@
     "turbo": "^2.3.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.16.0",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
