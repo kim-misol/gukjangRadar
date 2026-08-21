@@ -5,6 +5,7 @@ import { NewsClusterProcessor } from './news-cluster.processor';
 import { NewsAnalyzeProcessor } from './news-analyze.processor';
 import { ConnectionBuildProcessor } from './connection-build.processor';
 import { AlertDispatchProcessor } from './alert-dispatch.processor';
+import { MarketSnapshotProcessor } from './market-snapshot.processor';
 import { PipelineSchedulerService } from './pipeline-scheduler.service';
 
 @Module({
@@ -15,6 +16,7 @@ import { PipelineSchedulerService } from './pipeline-scheduler.service';
       { name: 'news.analyze' },
       { name: 'connection.build' },
       { name: 'alert.dispatch' },
+      { name: 'market.snapshot' },
     ),
   ],
   providers: [
@@ -23,6 +25,7 @@ import { PipelineSchedulerService } from './pipeline-scheduler.service';
     NewsAnalyzeProcessor,
     ConnectionBuildProcessor,
     AlertDispatchProcessor,
+    MarketSnapshotProcessor,
     PipelineSchedulerService,
   ],
 })

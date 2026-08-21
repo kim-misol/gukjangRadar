@@ -130,7 +130,17 @@ export async function runCounterCheck(
     }
   }
 
-  if (!(await isUnderDailyCap(deps.db, deps.dailyCostCapUsd, deps.now))) return fallback;
+  if (!(await isUnderDailyCap(deps.db, deps.dailyCostCapUsd, deps.now))) {
+    await recordLlmRun(deps.db, {
+      stage: 'COUNTER',
+      promptVersion: prompt.promptVersion,
+      model: deps.model,
+      inputHash,
+      inputRef: { clusterId: input.clusterId, companyId: input.companyId },
+      status: 'SKIPPED_COST_CAP',
+    });
+    return fallback;
+  }
 
   const rates = getModelRates(deps.model);
   try {

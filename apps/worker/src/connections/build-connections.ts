@@ -211,7 +211,21 @@ export async function buildConnectionsForCluster(
     }
 
     if (rawJudgements === null) {
-      if (!(await isUnderDailyCap(db, config.dailyCostCapUsd, now))) continue;
+      if (!(await isUnderDailyCap(db, config.dailyCostCapUsd, now))) {
+        await recordLlmRun(db, {
+          stage: 'MATCH',
+          promptVersion: prompt.promptVersion,
+          model: config.matchModel,
+          inputHash,
+          inputRef: {
+            clusterId,
+            entityId: entityRow.entityId,
+            candidateIds: candidates.map((c) => c.companyId),
+          },
+          status: 'SKIPPED_COST_CAP',
+        });
+        continue;
+      }
 
       const rates = getModelRates(config.matchModel);
       try {
@@ -354,12 +368,13 @@ export async function buildConnectionsForCluster(
         meme: memeScore,
         confidence: confidenceScore,
       };
+      const hasEvidenceGap = candidate.pathEdgeConfidences.some((c) => c <= 0.3);
       const connectionScore = computeConnectionScore(
         rawScores,
         j.connectionType,
         candidate.hopCount,
         {
-          hasEvidenceGap: candidate.pathEdgeConfidences.some((c) => c <= 0.3),
+          hasEvidenceGap,
           ambiguousAlias: candidate.isAmbiguousAlias,
           reviewed: false,
         },
@@ -395,6 +410,8 @@ export async function buildConnectionsForCluster(
         confidenceScore,
         connectionScore,
         relevanceBand,
+        hasEvidenceGap,
+        isAmbiguousAlias: candidate.isAmbiguousAlias,
         explanation: j.explanation,
         caution: j.caution,
         dataSources: candidate.evidence,

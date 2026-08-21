@@ -2,10 +2,8 @@
  * T2.2.3(추출 + input_hash 캐시) + T2.2.4(정규화·병합·불용어 + graph_node/MENTIONS).
  * docs/11 §2-⑥⑦, docs/08-prompt-entity-extraction.md.
  *
- * canonical_id 기반 동의어 병합(§6-④, 예: "엔비디아" ← "NVIDIA" 오탐 없이 자동 병합)은
- * 신뢰할 만한 판정을 하려면 entity별 별칭 이력이 쌓여야 하는데 아직 그 저장소가 없다 —
- * 이번 구현은 §6-③(정규화된 이름+kind 정확히 일치할 때만 재사용)까지만 하고, 동의어
- * 자동 병합은 W5 골든셋으로 오탐률을 잴 수 있을 때 다시 붙인다(docs/15 W4 진행 기록 참고).
+ * canonical_id 기반 동의어 병합(§6-④, 예: "엔비디아" ← "NVIDIA")은 LLM이 매 추출마다 주는
+ * `aliases` 필드로 그때그때 판정한다 — 상세 설계는 entity/merge-synonyms.ts 주석 참조.
  *
  * 실행: pnpm --filter @gukjang/worker exec tsx src/analysis/extract-entities.ts <clusterId>
  */
@@ -29,6 +27,7 @@ import { findCachedOutput, isUnderDailyCap, recordLlmRun } from '../llm/llm-run-
 import { getModelRates } from '../llm/model-pricing';
 import { ENTITY_EXTRACTION_TOOL } from '../llm/tool-schemas';
 import { ensureGraphNode } from '../graph/ensure-node';
+import { mergeSynonymAliases } from '../entity/merge-synonyms';
 
 const OTHER_TITLES_LIMIT = 5;
 
@@ -112,6 +111,14 @@ export async function extractEntitiesForCluster(
 
   if (entities === null) {
     if (!(await isUnderDailyCap(db, config.dailyCostCapUsd, now))) {
+      await recordLlmRun(db, {
+        stage: 'ENTITY',
+        promptVersion: prompt.promptVersion,
+        model: config.model,
+        inputHash,
+        inputRef: { clusterId },
+        status: 'SKIPPED_COST_CAP',
+      });
       await db
         .update(schema.newsCluster)
         .set({
@@ -202,10 +209,20 @@ export async function extractEntitiesForCluster(
       })
       .onConflictDoUpdate({
         target: [schema.entity.nameNorm, schema.entity.kind],
-        set: { mentionTotal: sql`${schema.entity.mentionTotal} + 1` },
+        // subtype은 이번 추출이 값을 준 경우에만 덮어쓴다 — 없으면(undefined) 기존 값을
+        // null로 되돌리지 않고 그대로 둔다. 이전엔 mentionTotal만 갱신하고 subtype은 최초
+        // insert 값에 영구히 고정돼 있었다(docs/19-remaining-work.md §4 2026-08-21 발견 버그).
+        set: {
+          mentionTotal: sql`${schema.entity.mentionTotal} + 1`,
+          ...(e.subtype ? { subtype: e.subtype } : {}),
+        },
       })
       .returning({ id: schema.entity.id });
     if (!entityRow) throw new Error(`entity upsert 실패: ${e.surface}`);
+
+    if (e.aliases && e.aliases.length > 0) {
+      await mergeSynonymAliases(db, entityRow.id, nameNorm, e.kind, e.aliases);
+    }
 
     const entityNodeId = await ensureGraphNode(db, 'ENTITY', entityRow.id, e.surface);
 

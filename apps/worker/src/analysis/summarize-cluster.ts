@@ -104,6 +104,14 @@ export async function summarizeCluster(
   }
 
   if (!(await isUnderDailyCap(db, config.dailyCostCapUsd, now))) {
+    await recordLlmRun(db, {
+      stage: 'SUMMARY',
+      promptVersion: prompt.promptVersion,
+      model: config.model,
+      inputHash,
+      inputRef: { clusterId },
+      status: 'SKIPPED_COST_CAP',
+    });
     await db
       .update(schema.newsCluster)
       .set({ analysisStatus: 'SKIPPED', analysisError: '일일 LLM 비용 상한 초과 (요약 스킵)' })

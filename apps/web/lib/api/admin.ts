@@ -2,16 +2,21 @@
  * T4.2 — 관리자 검수 큐 (docs/13-validation.md §4). DB 통합 동작은 유닛테스트 대상이 아니다
  * (lib/api/queries.ts 상단 원칙과 동일).
  */
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import { schema, type getDb } from '@gukjang/db';
 import type { ConnectionDto, ConnectionState } from '@gukjang/spec';
+import { computeConnectionScore, computeRelevanceBand, type ScoringConfig } from '@gukjang/core';
+import scoringConfig from '@gukjang/spec/scoring.config.json';
 import { toConnectionDto, type ConnectionRow } from './mappers';
 
 type Db = ReturnType<typeof getDb>;
 
+/** 리뷰 트리거(PENDING) + 피드백 자동승격(DISPUTED, T4.5)이 걸린 상태 — docs/13 §4. */
+const FLAGGED_STATUSES: ConnectionState[] = ['PENDING', 'DISPUTED'];
+
 export interface ReviewQueueParams {
   minScore: number;
-  /** true(기본) — PENDING(리뷰 트리거에 걸린 것)만. false — 상태 무관 최근 50건(일일 육안 검수용). */
+  /** true(기본) — PENDING/DISPUTED(리뷰 트리거·피드백 자동승격)만. false — 상태 무관 최근 50건(일일 육안 검수용). */
   onlyFlagged: boolean;
 }
 
@@ -19,7 +24,7 @@ export interface ReviewQueueParams {
 export async function listReviewQueue(db: Db, params: ReviewQueueParams): Promise<ConnectionDto[]> {
   const scoreFilter = gte(schema.connection.connectionScore, params.minScore);
   const where = params.onlyFlagged
-    ? and(eq(schema.connection.status, 'PENDING'), scoreFilter)
+    ? and(inArray(schema.connection.status, FLAGGED_STATUSES), scoreFilter)
     : scoreFilter;
 
   const rows = await db
@@ -104,10 +109,16 @@ const ACTION_TO_STATUS: Record<ReviewAction, ConnectionState> = {
 /**
  * docs/13 §4 액션 — APPROVE/REJECT/CORRECT. `connection_review`에 감사로그를 남기고
  * `connection.status`(+CORRECT면 patch 필드)를 갱신한다.
- * 알려진 단순화: docs/10 §8 "미검수 연결은 connection_score 상한 95" 해제(재계산)는 하지
- * 않는다 — `computeConnectionScore`에 필요한 hasEvidenceGap/ambiguousAlias 플래그가
- * connection 테이블에 저장돼 있지 않아, 저장 안 된 값을 추정해 재계산하면 오히려 부정확해질
- * 수 있다고 판단했다(docs/15 W8 진행 기록에 명시).
+ *
+ * docs/10 §8 "미검수 연결은 connection_score 상한 95" 해제 — APPROVE/CORRECT는 사람의 검수가
+ * 끝났다는 뜻이므로 `reviewed:true`로 connectionScore를 다시 계산해 상한을 푼다.
+ * `hasEvidenceGap`/`isAmbiguousAlias`는 build-connections.ts가 최초 판정 시점에 저장해 둔
+ * 값을 그대로 재사용한다(2026-08-21 시세 재점수화 배치 작업 때 추가된 컬럼 — 예전엔 이 값이
+ * 없어 재계산 자체를 미뤄뒀었다). CORRECT로 businessRelevance가 바뀌면 relevanceBand도
+ * 함께 재계산한다(패치만 반영되고 band는 그대로인 불일치를 막기 위함).
+ * `marketReactionScore`는 저장값이 정확히 0이면 "아직 재점수화 안 됨"(build 시점 기본값)으로
+ * 보고 null 취급한다 — 실제 계산식(volumeIntercept/priceIntercept 기본 50 기준)은 시세가
+ * 있으면 사실상 0이 나오지 않으므로 이 구분이 안전하다.
  */
 export async function submitConnectionReview(
   db: Db,
@@ -133,6 +144,54 @@ export async function submitConnectionReview(
     }
     if (typeof input.patch.explanation === 'string') {
       patchSet.explanation = input.patch.explanation;
+    }
+  }
+
+  if (input.action === 'APPROVE' || input.action === 'CORRECT') {
+    const [current] = await db
+      .select({
+        connectionType: schema.connection.connectionType,
+        hopCount: schema.connection.hopCount,
+        businessRelevanceScore: schema.connection.businessRelevanceScore,
+        keywordMatchScore: schema.connection.keywordMatchScore,
+        supplyChainScore: schema.connection.supplyChainScore,
+        marketReactionScore: schema.connection.marketReactionScore,
+        memeScore: schema.connection.memeScore,
+        confidenceScore: schema.connection.confidenceScore,
+        hasEvidenceGap: schema.connection.hasEvidenceGap,
+        isAmbiguousAlias: schema.connection.isAmbiguousAlias,
+      })
+      .from(schema.connection)
+      .where(eq(schema.connection.id, connectionId));
+
+    if (current) {
+      const businessRelevance =
+        typeof patchSet.businessRelevanceScore === 'number'
+          ? patchSet.businessRelevanceScore
+          : current.businessRelevanceScore;
+
+      patchSet.relevanceBand = computeRelevanceBand(
+        businessRelevance,
+        (scoringConfig as unknown as ScoringConfig).relevanceBand,
+      );
+      patchSet.connectionScore = computeConnectionScore(
+        {
+          businessRelevance,
+          keywordMatch: current.keywordMatchScore,
+          supplyChain: current.supplyChainScore,
+          marketReaction: current.marketReactionScore === 0 ? null : current.marketReactionScore,
+          meme: current.memeScore,
+          confidence: current.confidenceScore,
+        },
+        current.connectionType,
+        current.hopCount,
+        {
+          hasEvidenceGap: current.hasEvidenceGap,
+          ambiguousAlias: current.isAmbiguousAlias,
+          reviewed: true,
+        },
+        scoringConfig as unknown as ScoringConfig,
+      );
     }
   }
 

@@ -857,6 +857,139 @@ $2.01)가 그대로 집계돼 나오는 것까지 봤다. **미룬 것**: 일일
 `pnpm manual-verify-bookmarks` 실 postgres로 재확인, `next build` 프로덕션 빌드 성공
 (41개 라우트), 실 서버로 D4/C9/C12 API·페이지 왕복 확인(토큰 없음 401, 정상 200, 404 케이스).
 
+**백로그 정리 3차 — docs/19 §4/§5/§7 순서대로 이어서 처리 (2026-08-21 계속)**:
+외부 계정 없이 되는 것만 우선순위대로 골랐다. 넷 다 실 postgres(+실 Redis, 미들웨어는 실 서버
+왕복까지)로 검증했다.
+
+- **레이트리밋 미들웨어(docs/19 §7, W6→W7→W8 세 번 미뤄짐)**: `apps/web/middleware.ts` 신설.
+  Next.js 15.5(설치 버전 15.5.23)부터 미들웨어가 Node.js 런타임을 정식 지원해(`config.runtime
+  = 'nodejs'`, 이전엔 edge 전용이라 ioredis의 TCP 소켓을 못 썼다) 이번에 처음 가능해졌다.
+  판정(경로/메서드 → 등급 분류, 고정 윈도우 키 생성)은 `packages/core/src/rate-limit/policy.ts`
+  순수 함수(R7)가 담당하고 미들웨어는 Redis INCR/EXPIRE만 수행 — docs/07 §4 표 그대로 익명
+  조회 120/min, 검색 30/min, 제보(`POST /v1/discovery/requests`) 5/hour 3등급. Redis 장애 시
+  fail-open(요청을 막지 않음, counter-check.ts와 같은 원칙). **실 서버 검증**: `next dev`/
+  `next start`(프로덕션 빌드) 양쪽에 curl로 31회 연속 요청 → 31번째부터 429 + `Retry-After`
+  헤더 확인, 다른 등급(홈)은 영향 없음, 프로덕션 빌드(`next build`)도 정상 동작 확인.
+- **T4.5 사용자 피드백 자동 승격(docs/19 §5)**: `packages/core/src/feedback/promotion.ts`
+  `decideFeedbackPromotion`(순수 함수, TDD 11케이스) — docs/13 §4 "WRONG 3건 → 즉시 노출
+  중단(PENDING, VISIBLE_STATUSES 밖)", "FARFETCHED 비율 40%초과&&표본20↑ → 자동 DISPUTED
+  (여전히 노출되지만 검수 큐 승격)" 그대로. REJECTED/CORRECTED(관리자 최종 결정)는 피드백이
+  덮어쓰지 않는다. `apps/web/lib/api/feedback.ts`에 배선 — 새 피드백이 저장될 때마다 그 연결의
+  누적 카운트를 다시 집계해 상태를 갱신하고 `connection_review`에 감사로그(`reviewer:
+  system:feedback-promotion`)를 남긴다. `admin.ts`의 검수 큐 필터(`onlyFlagged`)도 PENDING
+  단독에서 PENDING/DISPUTED로 넓혔다(DISPUTED가 이번에 처음으로 실제 도달 가능해짐 — 이전엔
+  코드 어디에서도 DISPUTED로 전이시키는 경로가 없어 죽은 enum 값이었다). 임계값은
+  `spec/scoring.config.json`의 새 `feedbackPromotion` 섹션(가중치 하드코딩 금지 원칙).
+  **실 검증**: `pnpm manual-verify-feedback-promotion` 신설 — 실 서버에 WRONG 3회/UNDERSTOOD+
+  FARFETCHED 20회 POST → PENDING/DISPUTED 전이, 검수 큐에 둘 다 잡힘, 감사로그 확인.
+- **시세 재점수화 배치(docs/19 §4, docs/11 §2-⑪)**: 이 갭은 예상보다 컸다 — market_snapshot
+  동기화(T1.3.2, W7에 코드는 만들어졌음) 자체가 애초에 cron 배선이 안 돼 있어서(`pnpm
+  manual-verify-market-snapshot`으로만 수동 실행됨, 실 DB에 2행뿐이었던 이유) "재점수화 큐가
+  없다"보다 먼저 "스냅샷이 애초에 안 쌓인다"가 진짜 원인이었다. `market.snapshot` 큐 신설(신규
+  `MarketSnapshotProcessor`) — cron 5분마다(장중 시간대 창, `news.collect`와 같은 패턴)
+  `syncMarketSnapshots`(스냅샷 동기화, `getMarketStatus`가 실제 개장 여부를 다시 정확히 판별)
+  → 곧바로 `rescoreConnectionsForMarketReaction`(신규, `apps/worker/src/connections/
+  rescore-market.ts`) 순서로 실행 — 별도 cron 두 개로 나누지 않고 하나의 잡 안에서 체이닝해
+  "스냅샷이 막 갱신된 직후의 값으로 재점수화"를 보장했다. 재점수화는 LLM을 다시 부르지 않고
+  이미 저장된 businessRelevance/keywordMatch/supplyChain/meme/confidence는 그대로 둔 채
+  marketReactionScore만 새로 계산해 connectionScore를 재합성한다(`computeMarketReactionScore`+
+  `computeConnectionScore`, 둘 다 기존 순수 함수 재사용).
+  - **스키마 변경 하나를 같이 처리**: `computeConnectionScore`의 상한(cap) 로직이 필요로 하는
+    `hasEvidenceGap`/`isAmbiguousAlias` 플래그가 `connection` 테이블에 없어서(docs/19 §5에
+    "관리자 승인 시 상한 재계산 안 함"의 원인으로 이미 기록돼 있던 갭) 재점수화가 원래 상한을
+    잃어버릴 위험이 있었다 — 두 컬럼을 추가해(`spec/schema.sql`+`packages/db`마이그레이션
+    0005+`packages/db/src/schema.ts`, 같은 커밋) `build-connections.ts`가 최초 판정 시점에
+    이미 계산해 두고 있던 값을 그대로 저장하도록 고쳤다. 이걸로 T4.5(§5)가 미뤄뒀던 관리자
+    승인 상한 재계산 갭도 같이 풀렸다(이번엔 손대지 않았지만 다음엔 바로 붙일 수 있다).
+  - **실 검증 중 실제 데이터 오염 사고 2번**: 처음엔 "시세 없는 회사" 대조군을 진짜 무작위
+    회사로 골랐다가, 그 회사에 이미 이 세션 동안 쌓인 실 connection이 18~20건 있어서
+    스크립트가 그 실 데이터의 marketReactionScore/connectionScore까지 실제로 바꿔버렸다(제품
+    버그가 아니라 검증 스크립트의 실수 — 회사 하나에 시세를 심으면 그 회사의 모든 오늘자
+    연결이 재점수화 대상이 되는 게 함수의 정상 동작이다). `computeConnectionScore(marketReaction:
+    null, ...)`로 원래 값을 역산해 두 번 되돌렸고, 스크립트를 "connection이 전혀 없는 회사
+    2곳"만 고르도록 고쳐 완전히 격리한 뒤에야 재검증을 통과시켰다 — 이후 `manual-verify-*`
+    스크립트를 새로 쓸 때 공유 개발 DB에 실 데이터가 이미 많이 쌓여 있다는 전제를 이번에
+    다시 확인했다.
+  - **실 검증**: `pnpm manual-verify-market-rescore` 신설 — 격리된 fixture 회사 2곳(시세
+    있음/없음)으로 marketReactionScore/connectionScore가 `computeMarketReactionScore`/
+    `computeConnectionScore`와 정확히 같은 값으로 갱신되는지, 재실행 시 멱등(updated=0)인지,
+    시세 없는 연결은 안 건드리는지 확인.
+- **canonical_id 동의어 병합(docs/19 §4, docs/08 §6-④, W4부터 "골든셋으로 오탐률을 잴 수
+  있을 때 다시 붙인다"고 미뤄져 있었음 — 골든셋 17/17 지금이 그 시점)**: 원래 우려했던 "개체별
+  별칭 이력 저장소가 없다"는 문제를, 별도 테이블을 새로 만드는 대신 **LLM이 매 추출마다 이미
+  주는 `aliases` 필드**(entity_extraction.md 규칙 #6, "한자·영문·약칭 등 같은 대상의 다른
+  표기")를 그 자리에서 기존 entity와 대조하는 방식으로 풀었다 — 프롬프트가 매번 문맥에서
+  별칭을 다시 뽑아주므로 이력 없이도 대부분의 동의어 쌍을 그때그때 잡는다. 판정은
+  `packages/core/src/entity/canonical-merge.ts` `decideCanonicalMerge`(순수 함수, TDD
+  6케이스) — id가 작은(먼저 생성된) 쪽이 canonical, `canonical_id`는 항상 "진짜 루트"만
+  가리킨다는 불변식을 유지해(체인 2홉 이상 금지) 호출부가 `WHERE id=강등루트 OR
+  canonical_id=강등루트` 한 번의 UPDATE로 기존에 그 루트를 가리키던 다른 개체들까지 함께
+  평탄화한다. `apps/worker/src/entity/merge-synonyms.ts`(조회+UPDATE)가
+  `extract-entities.ts`(T2.2.4) 개체 upsert 직후에 매 alias마다 이 판정을 돌린다. kind가
+  같은 개체끼리만 대조(PERSON과 ORG가 우연히 같은 표기를 써도 병합 안 함).
+  - **의도적으로 안 한 것**: `graph_node(ENTITY)`는 여전히 개체 자신의 id로 생성된다 — canonical
+    id로 그래프 노드를 합치려면 `build-connections.ts`의 `entityRows` 조회(`graph_node.ref_id
+    = entity.id`로 조인)도 같이 고쳐야 하는데, 이 파이프라인의 심장(연결 생성)에 회귀 위험을
+    남기고 싶지 않아 이번 스코프에서는 뺐다. 즉 지금은 `canonical_id`가 정확히 채워지기
+    시작하지만, recall/그래프 탐색이 그 값을 아직 소비하지 않는다 — 다음 스텝 후보.
+  - **부수 발견(고치지 않음)**: `manual-verify-analysis`의 W4 DoD("노루"→WORD/TYPHOON_NAME)가
+    이 세션 시작 전부터(스태시로 커밋 상태에서 재현 확인) 이미 깨져 있었다 — entity upsert의
+    `onConflictDoUpdate`가 `mentionTotal`만 갱신하고 `subtype`은 갱신하지 않아서, 아주 오래
+    전(entity id=1) 만들어진 "노루" 행이 subtype=null로 굳어 있다. canonical_id 병합과는
+    무관한 별개 버그라 이번 스코프에서 고치지 않고 기록만 남긴다.
+  - **실 검증**: `pnpm manual-verify-canonical-merge` 신설 — 실 postgres에서 5가지 시나리오
+    확인: 기본 쌍 병합("엔비디아"↔"NVIDIA"), 재실행 멱등성, 체인 평탄화(이미 강등된 개체를
+    경유하지 않고 진짜 루트로 직결), 그룹 병합 평탄화(두 그룹이 합쳐지면 전원 한 번에 갱신),
+    kind가 다르면 병합 안 함 — 5개 전부 통과.
+
+**검증(백로그 정리 3차)**: `make ci` 클린 통과(core 326개), `next build`(web)/`tsc build`
+(worker) 프로덕션 빌드 성공, 신설 manual-verify 스크립트 3종 전부 실 postgres(+Redis)로
+그린 확인.
+
+**백로그 정리 4차 — docs/19 §5/§4 이어서 처리 (2026-08-22)**: 세션이 끊겼다 이어졌다 —
+3차에서 만들어둔 조건(컬럼 추가)과 발견해둔 버그를 바로 이어서 처리했다.
+
+- **관리자 승인 시 `connection_score` 상한(95) 재계산(docs/10 §8, docs/19 §5)**:
+  `submitConnectionReview`(`apps/web/lib/api/admin.ts`)가 APPROVE/CORRECT일 때
+  `hasEvidenceGap`/`isAmbiguousAlias`(3차에서 추가한 컬럼)를 그대로 재사용해
+  `reviewed:true`로 `computeConnectionScore`를 다시 계산하도록 고쳤다. CORRECT로
+  `businessRelevance`가 바뀌면 `relevanceBand`도 함께 재계산(이전엔 patch만 반영되고 band는
+  그대로인 불일치가 있었음 — 이번에 같이 고침). `marketReactionScore`는 저장값이 정확히
+  0이면 "아직 재점수화 안 됨"(build 시점 기본값)으로 보고 null 취급한다 — 실제 계산식
+  (`volumeIntercept`/`priceIntercept` 기본 50)은 시세가 있으면 사실상 0이 나오지 않으므로
+  이 구분이 안전하다는 판단. **실 검증**: `pnpm manual-verify-review-recalc` 신설 — 실 서버로
+  3가지 시나리오 확인: APPROVE로 95 상한이 실제 계산값(100)까지 풀리는지, CORRECT로
+  businessRelevance를 20으로 내리면 relevanceBand(LOW)와 connectionScore(29, 손으로도
+  검산)가 같이 바뀌는지, marketReactionScore가 0이 아니면(60) 재계산에 실제로 포함되는지
+  (포함 시 60, 잘못 null 처리하면 61이 나오게 설계해 회귀를 잡을 수 있게 함) — 세 값 전부
+  기대한 정수와 정확히 일치.
+- **entity upsert가 `subtype`을 갱신하지 않던 버그(3차에서 발견) 수정**:
+  `extract-entities.ts`의 `onConflictDoUpdate`에 `subtype`을 조건부로 추가했다 — 이번
+  추출이 값을 준 경우에만 덮어쓰고, 없으면(undefined) 기존 값을 null로 되돌리지 않는다.
+  **실 검증**: `pnpm manual-verify-entity-subtype-upsert` 신설(최초 insert→subtype 없음,
+  재추출로 값 채워짐, 다시 값 없이 재추출해도 유지됨 — 3단계 전부 확인) +
+  `pnpm manual-verify-analysis` 재실행으로 실제 부작용 확인 — 이 버그 때문에 세션 내내
+  실패로 보이던 W4 DoD("노루"→WORD/TYPHOON_NAME)가 entity#1의 스테일 데이터를 자연스럽게
+  다시 채워 넣으며 별도 백필 스크립트 없이 그린으로 바뀌었다.
+
+**검증(백로그 정리 4차)**: `make ci` 클린 통과, `next build`(web)/`tsc build`(worker)
+프로덕션 빌드 성공, 신설 manual-verify 스크립트 2종 + 기존 `manual-verify-analysis` 전부
+실 postgres로 그린 확인.
+
+- **LLM 호출이 일일 비용 상한으로 건너뛰어진 이벤트가 기록 안 되던 갭(docs/19 §5) 해소**:
+  `summarize-cluster.ts`/`extract-entities.ts`/`build-connections.ts`/`counter-check.ts`
+  4곳 전부 `isUnderDailyCap`이 false일 때 조용히 `continue`/`return`만 하고 `llm_run` 행을
+  안 남기고 있었다 — D5 비용 모니터(`/admin/costs`)가 상한에 걸려 스킵된 호출을 아예 볼 수
+  없었던 이유. `llm_run.status`가 실제 Postgres ENUM이 아니라 `text` 컬럼이라(schema.sql
+  주석으로만 관리) 스키마 마이그레이션 없이 `LlmRunStatus`에 `SKIPPED_COST_CAP` 값을
+  추가하고, 4곳 모두 스킵 직전에 `recordLlmRun(status:'SKIPPED_COST_CAP', costUsd 없음)`을
+  호출하도록 고쳤다. `getTodaySpendUsd`/`isUnderDailyCap`은 costUsd만 합산하므로 이 기록이
+  다시 스킵 판정에 영향을 주지 않고, `/admin/costs`의 상태별 집계는 이미 `status`로
+  동적 groupBy라 코드 변경 없이 새 값이 그대로 노출된다. **실 검증**:
+  `manual-verify-analysis`(요약 단계, 신규 assertion 추가) + `manual-verify-connections`/
+  `manual-verify-counter-check`(회귀 확인, 매칭·반증검사 단계는 기존 스크립트가 이미
+  실행하던 경로라 새 assertion 없이 그린만 재확인) — 넷 다 실 postgres로 통과.
+
 ---
 ## 주차별 게이트 (통과 못 하면 다음 주로 넘어가지 않는다)
 | 주 | 게이트 |

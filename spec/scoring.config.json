@@ -86,6 +86,13 @@
     "counterCheckRefuted": true
   },
 
+  "feedbackPromotion": {
+    "note": "docs/13-validation.md §4 사용자 피드백 자동 승격 규칙",
+    "farfetchedRatioAtLeast": 0.4,
+    "minSample": 20,
+    "wrongCountAtLeast": 3
+  },
+
   "recall": {
     "note": "docs/09-prompt-company-matching.md §2 Recall 룰 8종의 기본 recallScore(0~1). T2.3.1이 이 값을 읽어 하드코딩을 피한다.",
     "baseScoreByRule": {

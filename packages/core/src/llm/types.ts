@@ -9,8 +9,14 @@ import { CONNECTION_KINDS, ENTITY_KINDS, type LlmJudgement } from '@gukjang/spec
 /** llm_run.stage — schema.sql 주석 그대로 (실제 ENUM 타입은 아님). */
 export type LlmStage = 'SUMMARY' | 'ENTITY' | 'MATCH' | 'EXPLAIN' | 'COUNTER';
 
-/** llm_run.status — schema.sql 주석 그대로. */
-export type LlmRunStatus = 'OK' | 'INVALID_JSON' | 'GUARDRAIL_BLOCKED' | 'ERROR';
+/**
+ * llm_run.status — schema.sql 주석 값(OK|INVALID_JSON|GUARDRAIL_BLOCKED|ERROR) +
+ * SKIPPED_COST_CAP(일일 비용 상한 초과로 호출 자체를 안 한 이벤트, docs/19-remaining-work.md
+ * §5 2026-08-22 추가 — D5 비용 모니터가 이 이벤트를 볼 수 있도록 기록 지점을 남긴다).
+ * status 컬럼은 실제 Postgres ENUM이 아니라 text라 스키마 마이그레이션 없이 추가 가능.
+ */
+export type LlmRunStatus =
+  'OK' | 'INVALID_JSON' | 'GUARDRAIL_BLOCKED' | 'ERROR' | 'SKIPPED_COST_CAP';
 
 export const SummaryOutputSchema = z.object({
   sentences: z.array(z.string().min(1)).length(3),

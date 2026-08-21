@@ -250,6 +250,11 @@ CREATE TABLE connection (
   connection_score         smallint NOT NULL,
   relevance_band           relevance_band NOT NULL,
 
+  -- computeConnectionScore 상한(cap) 재계산용 원본 플래그(docs/10 §8) — 관리자 승인 후
+  -- 상한 재적용(unreviewedHighScore)과 시세 재점수화 배치 양쪽이 이 값을 그대로 재사용한다.
+  has_evidence_gap   boolean NOT NULL DEFAULT false,
+  is_ambiguous_alias boolean NOT NULL DEFAULT false,
+
   explanation       text   NOT NULL,      -- 사용자 노출 한 줄 (금지어 린터 대상)
   caution           text,                 -- "투자자가 오해할 수 있는 부분"
   counter_evidence  text,                 -- 반증 검사 결과 (B6)

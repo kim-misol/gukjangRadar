@@ -56,9 +56,6 @@
 - **PERSON_DICT 사전 데이터 없음** — 인물→임원/최대주주 매핑. 임원 데이터 자체가 없어 코드
   경로는 있어도 후보가 절대 안 나온다(docs/14 backlog에도 별도 태스크가 없음 — 태스크 자체를
   새로 정의해야 함).
-- **canonical_id 동의어 병합 없음**(예: "엔비디아"←"NVIDIA") — `entity.canonical_id` 실 DB
-  전부 `NULL`(직접 확인). W4에 "골든셋으로 오탐률을 잴 수 있을 때 다시 붙인다"고 적어놨는데,
-  골든셋이 17/17까지 된 지금도 안 돌아왔다.
 - **T2.3.8 캐시 무효화(CDN 태그 purge)** — CDN 자체를 아직 안 붙여서 대상이 없음. 실 배포(Vercel)
   붙을 때 같이 볼 것.
 - **B-2 시장 이상치 뉴스 소스** — 스키마만 있고 로직 없음(KIS 시세 배치엔 이제 값이 들어오니
@@ -68,26 +65,22 @@
 - **Trends 급상승 키워드 → entity 후보 연결** — fetch/파싱까지만 있고 저장 연결 안 함.
 - **연합뉴스·매일경제 RSS가 403** — 이 개발 환경에서도 재현됨(`spec/news_sources.seed.json`에
   `is_active=false`). 실 배포 환경(다른 IP대역)에서 다시 열리는지 재확인 필요.
-- **시세 재점수화 배치** — 5분마다 스냅샷은 쌓이는데(`market_snapshot` 실 DB 2건, 장중에만
-  쌓임), 그걸로 기존 `connection`을 재점수화하는 BullMQ 잡(`connection.score` 큐) 자체가
-  없다. cron 스케줄러(`pipeline-scheduler.service.ts`)에도 등록 안 됨.
 - **골든셋에 반증검사(B6) 케이스 없음** — `spec/golden/golden_set.jsonl` 포맷이 MATCH 단계
   (연결 유형 판정)만 테스트하도록 돼 있어, 그 다음 단계인 반증검사를 검증하려면 케이스
   포맷 확장이 먼저 필요하다. 지금은 유닛테스트 6건 + `pnpm manual-verify-counter-check`로만
   커버(§2 B6).
 - **A6 산업/테마 사전 추가 확장은 T1.1.1(KRX 전종목 수집)이 먼저 필요** — 지금 21개뿐인
   `company` 테이블을 실 KRX 목록으로 채워야 300~500개 사전이 의미가 생긴다(§2 A6).
+- **canonical_id는 채워지기 시작했지만 recall이 아직 소비하지 않음(2026-08-21 신규 발견)** —
+  `packages/core/src/entity/canonical-merge.ts`+`apps/worker/src/entity/merge-synonyms.ts`로
+  동의어 병합(예: "엔비디아"←"NVIDIA")은 구현·검증됐다(`pnpm manual-verify-canonical-merge`).
+  하지만 `graph_node(ENTITY)`는 여전히 개체 자신의 id로 생성돼, canonical로 병합된 개체와
+  원본 개체가 그래프에서는 여전히 별개 노드다 — `build-connections.ts`의 `entityRows` 조회
+  (`graph_node.ref_id = entity.id` 조인)를 canonical_id 기준으로 고쳐야 실제로 recall/그래프
+  탐색에 반영된다. 연결 생성 파이프라인 회귀 위험 때문에 이번엔 일부러 손대지 않음.
 
 ## 5. 운영 도구 (EPIC 4) — D4 외
 - **T4.4 섀도 모드 실행기** 없음.
-- **T4.5 피드백 자동 승격 로직** 없음 — docs/13 §4: "FARFETCHED 40%↑&&표본20↑→자동
-  DISPUTED", "WRONG 3건→즉시 노출 중단". 지금은 피드백을 저장만 하고 아무 액션도 안 함.
-- **관리자 승인 시 `connection_score` 상한(95) 재계산 안 함** — `computeConnectionScore`가
-  필요로 하는 `hasEvidenceGap`/`ambiguousAlias` 플래그가 `connection` 테이블에 저장 안 돼
-  있어 일부러 미룸(W8 기록).
-- **LLM 호출이 일일 비용 상한으로 건너뛰어진 이벤트가 기록 안 됨** — `build-connections.ts`가
-  상한 초과 시 그냥 `continue`해서 `llm_run` 행 자체를 안 남긴다. D5 비용 모니터(§2)도 이
-  이벤트는 못 본다 — 별도 기록 지점을 추가해야 한다.
 
 ## 6. 화면/UX
 - **카테고리 탭 / 정렬 / 검색창(홈 상단) / 스크랩** — docs/17 프로토타입엔 있지만
@@ -108,8 +101,6 @@
   빌드가 안정적인지 별도 확인 필요.
 
 ## 7. W8 세부 — 코드는 있지만 좁혀둔 범위
-- **레이트리밋 미들웨어 없음** — IP당 조회 120/min, 검색 30/min, 제보 5/hour(docs/07 §4).
-  W6→W7→W8 세 번 미뤄짐.
 - **BullMQ 잡 단위 Sentry 캡처 없음** — 워커 부팅 실패만 캡처. 개별 파이프라인 잡 실패
   (`'failed'` 이벤트) 캡처는 API를 확인 없이 배선하고 싶지 않아 미룸.
 - **분석 이벤트 `card_view` 배선 범위** — 홈 뉴스 카드에만 배선. 발견/검색/종목 상세의

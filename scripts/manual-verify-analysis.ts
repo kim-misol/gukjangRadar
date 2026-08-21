@@ -11,7 +11,7 @@
  * 실행: pnpm manual-verify-analysis
  */
 import { closeDb, getDb, schema } from '@gukjang/db';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type {
   AnthropicLlmClient,
   CallToolParams,
@@ -263,6 +263,19 @@ async function main(): Promise<void> {
     process.exitCode = 1;
   } else {
     console.log('✓ 비용 상한 초과 시 스킵 확인');
+  }
+
+  const skippedRuns = await db
+    .select({ id: schema.llmRun.id })
+    .from(schema.llmRun)
+    .where(and(eq(schema.llmRun.stage, 'SUMMARY'), eq(schema.llmRun.status, 'SKIPPED_COST_CAP')));
+  if (skippedRuns.length === 0) {
+    console.error('✗ SKIPPED_COST_CAP llm_run 기록 실패 — D5 비용 모니터에 이 이벤트가 안 잡힘');
+    process.exitCode = 1;
+  } else {
+    console.log(
+      `✓ SKIPPED_COST_CAP llm_run ${skippedRuns.length}건 기록 확인(D5 비용 모니터 노출됨)`,
+    );
   }
 
   console.log('\n=== quote-guard 확인 (원문 20자 초과 그대로 인용 시 저장 거부) ===');

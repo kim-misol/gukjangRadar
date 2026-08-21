@@ -348,6 +348,9 @@ export const connection = pgTable(
     connectionScore: smallint('connection_score').notNull(),
     relevanceBand: relevanceBand('relevance_band').notNull(),
 
+    hasEvidenceGap: boolean('has_evidence_gap').notNull().default(false),
+    isAmbiguousAlias: boolean('is_ambiguous_alias').notNull().default(false),
+
     explanation: text('explanation').notNull(),
     caution: text('caution'),
     counterEvidence: text('counter_evidence'),
