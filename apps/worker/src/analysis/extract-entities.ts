@@ -28,6 +28,7 @@ import { loadPrompt } from '../llm/load-prompt';
 import { findCachedOutput, isUnderDailyCap, recordLlmRun } from '../llm/llm-run-store';
 import { getModelRates } from '../llm/model-pricing';
 import { ENTITY_EXTRACTION_TOOL } from '../llm/tool-schemas';
+import { ensureGraphNode } from '../graph/ensure-node';
 
 const OTHER_TITLES_LIMIT = 5;
 
@@ -42,34 +43,6 @@ export interface ExtractEntitiesResult {
 export interface ExtractEntitiesConfig {
   model: string;
   dailyCostCapUsd: number;
-}
-
-async function ensureGraphNode(
-  db: ReturnType<typeof getDb>,
-  kind: (typeof schema.nodeKind.enumValues)[number],
-  refId: number,
-  label: string,
-): Promise<number> {
-  const isThisNode = and(eq(schema.graphNode.kind, kind), eq(schema.graphNode.refId, refId));
-  const [existing] = await db
-    .select({ id: schema.graphNode.id })
-    .from(schema.graphNode)
-    .where(isThisNode);
-  if (existing) return existing.id;
-
-  const [inserted] = await db
-    .insert(schema.graphNode)
-    .values({ kind, refId, label })
-    .onConflictDoNothing({ target: [schema.graphNode.kind, schema.graphNode.refId] })
-    .returning({ id: schema.graphNode.id });
-  if (inserted) return inserted.id;
-
-  const [row] = await db
-    .select({ id: schema.graphNode.id })
-    .from(schema.graphNode)
-    .where(isThisNode);
-  if (!row) throw new Error(`graph_node 생성/조회 실패: ${kind}#${refId}`);
-  return row.id;
 }
 
 export async function extractEntitiesForCluster(

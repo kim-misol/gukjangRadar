@@ -29,9 +29,24 @@ export function parsePromptMarkdown(markdown: string): ParsedPrompt {
   return { promptVersion, stage, system, userTemplate };
 }
 
-/** `{{key}}` 자리표시자를 vars 값으로 치환한다. 없는 키는 빈 문자열로 남긴다. */
-export function renderPromptTemplate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => vars[key] ?? '');
+/**
+ * `{{key}}` 자리표시자를 vars 값으로 치환한다. 없는 키는 빈 문자열로 남긴다.
+ * `{{#each name}}...{{/each}}` 블록은 loops[name] 배열 길이만큼 반복하며, 블록 안의
+ * `{{field}}`는 각 원소의 값으로 치환한다(spec/prompts/company_matching.md의 [CANDIDATES] 블록).
+ */
+export function renderPromptTemplate(
+  template: string,
+  vars: Record<string, string>,
+  loops: Record<string, ReadonlyArray<Record<string, string>>> = {},
+): string {
+  const expanded = template.replace(
+    /\{\{#each (\w+)\}\}([\s\S]*?)\{\{\/each\}\}/g,
+    (_match, key: string, inner: string) => {
+      const items = loops[key] ?? [];
+      return items.map((item) => renderPromptTemplate(inner.trim(), item)).join('\n');
+    },
+  );
+  return expanded.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => vars[key] ?? '');
 }
 
 function extractSection(markdown: string, startHeading: string, endHeading: string): string {

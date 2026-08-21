@@ -19,6 +19,8 @@
     "manual-verify-dart-sync": "tsx scripts/manual-verify-dart-sync.ts",
     "manual-verify-news-pipeline": "tsx scripts/manual-verify-news-pipeline.ts",
     "manual-verify-analysis": "tsx scripts/manual-verify-analysis.ts",
+    "manual-verify-connections": "tsx scripts/manual-verify-connections.ts",
+    "golden": "tsx scripts/run-golden.ts",
     "db:generate": "pnpm --filter @gukjang/db generate",
     "db:migrate": "pnpm --filter @gukjang/db migrate",
     "db:reset": "pnpm --filter @gukjang/db reset",

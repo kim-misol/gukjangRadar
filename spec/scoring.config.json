@@ -86,6 +86,25 @@
     "counterCheckRefuted": true
   },
 
+  "recall": {
+    "note": "docs/09-prompt-company-matching.md §2 Recall 룰 8종의 기본 recallScore(0~1). T2.3.1이 이 값을 읽어 하드코딩을 피한다.",
+    "baseScoreByRule": {
+      "ALIAS_EXACT": 1.0,
+      "ALIAS_PREFIX": 0.55,
+      "ALIAS_JAMO_SIMILAR_MIN": 0.35,
+      "ALIAS_JAMO_SIMILAR_SPAN": 0.4,
+      "THEME_DICT": 0.7,
+      "SUPPLY_DICT": 0.75,
+      "PERSON_DICT": 0.85,
+      "GRAPH_EXPAND": 0.8,
+      "EMBEDDING": 0.5
+    },
+    "jamoSimilarityFloor": 0.6,
+    "candidateCap": 40,
+    "maxHops": 3,
+    "pruneWeightFloor": 0.15
+  },
+
   "heatScore": {
     "note": "docs/11-pipeline.md §2-④: heat_score = log_base(article_count)×coef + tierBonus + 속도×velocityCoef. connection_score(R6)와 무관한 '화제도' 지표 — 초기값이며 운영 데이터로 재보정 예정.",
     "articleCountLogBase": 2,

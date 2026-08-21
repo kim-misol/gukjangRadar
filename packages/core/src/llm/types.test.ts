@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SummaryOutputSchema, EntityExtractionOutputSchema } from './types';
+import {
+  SummaryOutputSchema,
+  EntityExtractionOutputSchema,
+  CompanyMatchingOutputSchema,
+  toLlmJudgement,
+} from './types';
 
 describe('SummaryOutputSchema', () => {
   it('정확히 3문장이면 통과', () => {
@@ -95,5 +100,113 @@ describe('EntityExtractionOutputSchema', () => {
       role: 'SUBJECT' as const,
     }));
     expect(EntityExtractionOutputSchema.safeParse({ entities }).success).toBe(false);
+  });
+});
+
+describe('CompanyMatchingOutputSchema', () => {
+  // spec/prompts/company_matching.md FEW-SHOT(태풍 노루) 예시를 그대로 통과시킨다.
+  it('few-shot 예시(노루페인트/노루홀딩스/대한제당)를 통과시킨다', () => {
+    const result = CompanyMatchingOutputSchema.safeParse({
+      judgements: [
+        {
+          company_id: 101,
+          verdict: 'ACCEPT',
+          connection_type: 'NAME_MATCH',
+          business_relevance: 10,
+          meme: 85,
+          confidence: 95,
+          explanation: "뉴스의 '노루'와 회사명이 그대로 일치합니다.",
+          caution: '태풍과 도료 사업 사이의 연관성은 확인되지 않습니다.',
+          used_path_steps: [1, 2],
+        },
+        {
+          company_id: 103,
+          verdict: 'REJECT',
+          connection_type: 'KEYWORD',
+          business_relevance: 0,
+          meme: 0,
+          confidence: 80,
+          explanation: '뉴스와 설명 가능한 경로가 없습니다.',
+          caution: null,
+          used_path_steps: [],
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('60자를 초과하는 explanation은 실패', () => {
+    const result = CompanyMatchingOutputSchema.safeParse({
+      judgements: [
+        {
+          company_id: 1,
+          verdict: 'ACCEPT',
+          connection_type: 'DIRECT',
+          business_relevance: 50,
+          meme: 0,
+          confidence: 80,
+          explanation: '가'.repeat(61),
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('알 수 없는 connection_type이면 실패', () => {
+    const result = CompanyMatchingOutputSchema.safeParse({
+      judgements: [
+        {
+          company_id: 1,
+          verdict: 'ACCEPT',
+          connection_type: 'UNKNOWN',
+          business_relevance: 50,
+          meme: 0,
+          confidence: 80,
+          explanation: 'x',
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('toLlmJudgement', () => {
+  it('snake_case 원시 출력을 camelCase LlmJudgement로 옮긴다', () => {
+    const judgement = toLlmJudgement({
+      company_id: 101,
+      verdict: 'ACCEPT',
+      connection_type: 'NAME_MATCH',
+      business_relevance: 10,
+      meme: 85,
+      confidence: 95,
+      explanation: '설명',
+      caution: null,
+      used_path_steps: [1, 2],
+    });
+    expect(judgement).toEqual({
+      companyId: 101,
+      verdict: 'ACCEPT',
+      connectionType: 'NAME_MATCH',
+      businessRelevance: 10,
+      meme: 85,
+      confidence: 95,
+      explanation: '설명',
+      caution: null,
+      usedPathSteps: [1, 2],
+    });
+  });
+
+  it('caution/used_path_steps 생략 시 안전한 기본값을 쓴다', () => {
+    const judgement = toLlmJudgement({
+      company_id: 1,
+      verdict: 'REJECT',
+      connection_type: 'KEYWORD',
+      business_relevance: 0,
+      meme: 0,
+      confidence: 80,
+      explanation: '설명',
+    });
+    expect(judgement.caution).toBeNull();
+    expect(judgement.usedPathSteps).toEqual([]);
   });
 });

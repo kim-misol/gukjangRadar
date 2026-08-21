@@ -37,6 +37,13 @@ interface SeedCompany {
    * T1.2.2/1.2.3(business_summary/AFFILIATION) 수동 검증을 위해 일부 회사에만 채운다.
    */
   corpCode?: string;
+  /**
+   * T1.2.2 business_summary 필드 개발 시드용 placeholder — 실제로는 DART 기반으로
+   * sync-business-summary.ts가 채우는 값이다. 골든셋(G-004/G-005) SUPPLY_CHAIN 케이스가
+   * G6(사업연관성 근거 확인) 가드레일을 실제로 통과하려면 business_summary에 경로 라벨과
+   * 겹치는 문장이 있어야 하므로, 그 두 회사에 한해서만 짧게 채워 둔다.
+   */
+  businessSummary?: string;
 }
 
 const SEED_COMPANIES: SeedCompany[] = [
@@ -56,6 +63,7 @@ const SEED_COMPANIES: SeedCompany[] = [
     // A6: 구사명 — docs/12-edge-cases.md §A6
     formerNames: ['하이닉스반도체'],
     corpCode: '10000003',
+    businessSummary: 'HBM 등 메모리 반도체를 제조하는 반도체 기업이다.',
   },
   { ticker: '090350', name: '노루페인트', market: 'KOSPI', sector: '화학', corpCode: '10000001' },
   {
@@ -85,6 +93,46 @@ const SEED_COMPANIES: SeedCompany[] = [
   { ticker: '003490', name: '대한항공', market: 'KOSPI', sector: '운수창고업' },
   { ticker: '086520', name: '에코프로', market: 'KOSDAQ', sector: '화학', isHolding: true },
   { ticker: '247540', name: '에코프로비엠', market: 'KOSDAQ', sector: '화학' },
+  // W5(T2.3.1) SUPPLY_DICT 골든셋(G-005)·spec/prompts/company_matching.md FEW-SHOT 예시 그대로.
+  {
+    ticker: '042700',
+    name: '한미반도체',
+    market: 'KOSDAQ',
+    sector: '반도체장비',
+    businessSummary: 'HBM 생산 공정에 쓰이는 반도체장비(TC본더 등)를 공급하는 기업이다.',
+  },
+];
+
+/**
+ * W5(T2.3.1) THEME_DICT/SUPPLY_DICT 개념 사전 — spec/prompts/company_matching.md FEW-SHOT
+ * "엔비디아 → AI 가속기 → HBM → SK하이닉스" / "...→ 반도체장비 → 한미반도체" 예시를 그대로
+ * 최소 시드로 재현한다. docs/14 backlog T1.2.4(테마 300개)/T1.2.5(공급망 100쌍)의 전체 사전은
+ * 아직 없다 — 이 4행은 그 전체 사전이 아니라 Recall 엔진(T2.3.1)이 실제로 동작함을 증명하는
+ * 최소 예시다(W2의 business_summary/AFFILIATION처럼 실제 데이터가 준비되는 대로 확장할 것).
+ */
+interface SeedConcept {
+  name: string;
+  kind: string;
+}
+const SEED_CONCEPTS: SeedConcept[] = [
+  { name: 'AI가속기', kind: 'PRODUCT' },
+  { name: 'HBM', kind: 'MATERIAL' },
+  { name: '반도체장비', kind: 'INDUSTRY' },
+];
+interface SeedConceptEdge {
+  from: string;
+  to: string;
+  edgeType: (typeof schema.edgeKind.enumValues)[number];
+  weight: number;
+}
+const SEED_CONCEPT_EDGES: SeedConceptEdge[] = [
+  { from: 'AI가속기', to: 'HBM', edgeType: 'RELATED_CONCEPT', weight: 0.9 },
+  { from: 'AI가속기', to: '반도체장비', edgeType: 'RELATED_CONCEPT', weight: 0.7 },
+];
+/** concept → company 공급망 엣지. company는 SEED_COMPANIES의 ticker로 찾는다. */
+const SEED_SUPPLY_CHAIN_EDGES: { conceptName: string; companyTicker: string; weight: number }[] = [
+  { conceptName: 'HBM', companyTicker: '000660', weight: 0.85 },
+  { conceptName: '반도체장비', companyTicker: '042700', weight: 0.7 },
 ];
 
 /**
@@ -148,6 +196,7 @@ async function main(): Promise<void> {
   console.log('시드 시작…');
 
   let aliasCount = 0;
+  const companyIdByTicker = new Map<string, number>();
 
   await db.transaction(async (tx) => {
     // 기업 + 별칭 인덱스 (T1.1.1/T1.1.3)
@@ -164,13 +213,23 @@ async function main(): Promise<void> {
           sector: c.sector,
           isHolding: c.isHolding ?? false,
           corpCode: c.corpCode,
+          businessSummary: c.businessSummary,
+          businessSummaryUpdatedAt: c.businessSummary ? new Date() : undefined,
         })
         .onConflictDoUpdate({
           target: schema.company.ticker,
-          set: { name: c.name, nameNorm, nameJamo: toJamo(nameNorm), corpCode: c.corpCode },
+          set: {
+            name: c.name,
+            nameNorm,
+            nameJamo: toJamo(nameNorm),
+            corpCode: c.corpCode,
+            businessSummary: c.businessSummary,
+            businessSummaryUpdatedAt: c.businessSummary ? new Date() : undefined,
+          },
         })
         .returning({ id: schema.company.id });
       if (!row) throw new Error(`기업 upsert 실패: ${c.name}`);
+      companyIdByTicker.set(c.ticker, row.id);
 
       const aliasInput: CompanyAliasInput = {
         name: c.name,
@@ -281,6 +340,100 @@ async function main(): Promise<void> {
         .insert(schema.entityStoplist)
         .values({ nameNorm: normalizeEntityName(name), reason: '매일 등장하는 일반 기관/지수명' })
         .onConflictDoNothing({ target: schema.entityStoplist.nameNorm });
+    }
+
+    // 개념 사전 최소 시드 (T2.3.1 THEME_DICT/SUPPLY_DICT 실동작 증명 — 위 SEED_CONCEPTS 주석 참고)
+    const conceptIdByName = new Map<string, number>();
+    const conceptNodeIdByName = new Map<string, number>();
+    for (const c of SEED_CONCEPTS) {
+      const nameNorm = normalizeName(c.name);
+      const [row] = await tx
+        .insert(schema.concept)
+        .values({ name: c.name, nameNorm, kind: c.kind })
+        .onConflictDoUpdate({ target: schema.concept.name, set: { nameNorm, kind: c.kind } })
+        .returning({ id: schema.concept.id });
+      if (!row) throw new Error(`개념 upsert 실패: ${c.name}`);
+      conceptIdByName.set(c.name, row.id);
+
+      const [node] = await tx
+        .insert(schema.graphNode)
+        .values({ kind: 'CONCEPT', refId: row.id, label: c.name })
+        .onConflictDoUpdate({
+          target: [schema.graphNode.kind, schema.graphNode.refId],
+          set: { label: c.name },
+        })
+        .returning({ id: schema.graphNode.id });
+      if (!node) throw new Error(`개념 graph_node upsert 실패: ${c.name}`);
+      conceptNodeIdByName.set(c.name, node.id);
+    }
+
+    const companyNodeIdByTicker = new Map<string, number>();
+    for (const ticker of SEED_SUPPLY_CHAIN_EDGES.map((e) => e.companyTicker)) {
+      if (companyNodeIdByTicker.has(ticker)) continue;
+      const companyId = companyIdByTicker.get(ticker);
+      const company = SEED_COMPANIES.find((c) => c.ticker === ticker);
+      if (!companyId || !company) throw new Error(`공급망 시드 대상 기업 없음: ${ticker}`);
+      const [node] = await tx
+        .insert(schema.graphNode)
+        .values({ kind: 'COMPANY', refId: companyId, label: company.name })
+        .onConflictDoUpdate({
+          target: [schema.graphNode.kind, schema.graphNode.refId],
+          set: { label: company.name },
+        })
+        .returning({ id: schema.graphNode.id });
+      if (!node) throw new Error(`기업 graph_node upsert 실패: ${ticker}`);
+      companyNodeIdByTicker.set(ticker, node.id);
+    }
+
+    for (const e of SEED_CONCEPT_EDGES) {
+      const srcNodeId = conceptNodeIdByName.get(e.from);
+      const dstNodeId = conceptNodeIdByName.get(e.to);
+      if (!srcNodeId || !dstNodeId) throw new Error(`개념 엣지 노드 없음: ${e.from} → ${e.to}`);
+      await tx
+        .insert(schema.graphEdge)
+        .values({
+          srcNodeId,
+          dstNodeId,
+          edgeType: e.edgeType,
+          weight: e.weight.toString(),
+          confidence: e.weight.toString(),
+          origin: 'DICTIONARY',
+          evidence: { source: 'DICTIONARY', label: `${e.from} → ${e.to}`, seed: true },
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.graphEdge.srcNodeId,
+            schema.graphEdge.dstNodeId,
+            schema.graphEdge.edgeType,
+          ],
+          set: { weight: e.weight.toString(), confidence: e.weight.toString() },
+        });
+    }
+
+    for (const e of SEED_SUPPLY_CHAIN_EDGES) {
+      const srcNodeId = conceptNodeIdByName.get(e.conceptName);
+      const dstNodeId = companyNodeIdByTicker.get(e.companyTicker);
+      if (!srcNodeId || !dstNodeId)
+        throw new Error(`공급망 엣지 노드 없음: ${e.conceptName} → ${e.companyTicker}`);
+      await tx
+        .insert(schema.graphEdge)
+        .values({
+          srcNodeId,
+          dstNodeId,
+          edgeType: 'SUPPLY_CHAIN',
+          weight: e.weight.toString(),
+          confidence: e.weight.toString(),
+          origin: 'DICTIONARY',
+          evidence: { source: 'DICTIONARY', label: `${e.conceptName} 공급망`, seed: true },
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.graphEdge.srcNodeId,
+            schema.graphEdge.dstNodeId,
+            schema.graphEdge.edgeType,
+          ],
+          set: { weight: e.weight.toString(), confidence: e.weight.toString() },
+        });
     }
   });
 

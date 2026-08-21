@@ -12,8 +12,8 @@ import { normalizeName, resolveAffiliationCandidates } from '@gukjang/core';
 import type { KnownCompany } from '@gukjang/core';
 import { schema } from '@gukjang/db';
 import type { getDb } from '@gukjang/db';
-import { and, eq } from 'drizzle-orm';
 import { DartClient } from './dart-client';
+import { ensureGraphNode } from '../graph/ensure-node';
 
 export interface AffiliationSyncResult {
   scanned: number;
@@ -22,38 +22,8 @@ export interface AffiliationSyncResult {
   skippedNoData: number;
 }
 
-/** company.id ↔ graph_node.id 매핑을 만들되, 없으면 만든다 (kind=COMPANY). */
-async function ensureCompanyNode(
-  db: ReturnType<typeof getDb>,
-  companyId: number,
-  label: string,
-): Promise<number> {
-  const isThisCompanyNode = and(
-    eq(schema.graphNode.kind, 'COMPANY'),
-    eq(schema.graphNode.refId, companyId),
-  );
-
-  const [existing] = await db
-    .select({ id: schema.graphNode.id })
-    .from(schema.graphNode)
-    .where(isThisCompanyNode);
-  if (existing) return existing.id;
-
-  const [inserted] = await db
-    .insert(schema.graphNode)
-    .values({ kind: 'COMPANY', refId: companyId, label })
-    .onConflictDoNothing({ target: [schema.graphNode.kind, schema.graphNode.refId] })
-    .returning({ id: schema.graphNode.id });
-  if (inserted) return inserted.id;
-
-  // onConflictDoNothing이 아무것도 반환하지 않은 경우(동시 실행 등) 재조회.
-  const [row] = await db
-    .select({ id: schema.graphNode.id })
-    .from(schema.graphNode)
-    .where(isThisCompanyNode);
-  if (!row) throw new Error(`graph_node 생성/조회 실패: company #${companyId}`);
-  return row.id;
-}
+const ensureCompanyNode = (db: ReturnType<typeof getDb>, companyId: number, label: string) =>
+  ensureGraphNode(db, 'COMPANY', companyId, label);
 
 export async function syncAffiliationEdges(
   db: ReturnType<typeof getDb>,

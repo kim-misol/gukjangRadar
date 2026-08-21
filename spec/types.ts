@@ -295,6 +295,14 @@ export interface Candidate {
   path: PathStep[];
   hopCount: number;
   evidence: Evidence[];
+  /** docs/10-scoring.md §2 결과(0~100). 이름 관련 엣지가 없는 경로는 0. 스코어링 단계에서 재사용. */
+  keywordMatchScore: Score100;
+  /** 경로에 is_ambiguous 별칭이 관여했는가 — connectionScore의 ambiguousAlias 상한(§6) 판정에 쓴다. */
+  isAmbiguousAlias: boolean;
+  /** 경로를 이룬 각 엣지의 confidence(0~1) — computeConfidenceScore(§5)의 min() 입력. */
+  pathEdgeConfidences: number[];
+  /** 경로를 이룬 각 엣지의 weight(0~1) — supplyChain 점수(§1) 등 경로 강도 계산에 쓴다. */
+  pathEdgeWeights: number[];
 }
 
 /** LLM 이 반환해야 하는 구조 (tool_use JSON schema 로 강제) */

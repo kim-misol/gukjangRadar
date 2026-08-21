@@ -79,4 +79,35 @@ describe('renderPromptTemplate', () => {
   it('같은 키가 여러 번 나오면 모두 치환한다', () => {
     expect(renderPromptTemplate('{{a}} {{a}}', { a: 'x' })).toBe('x x');
   });
+
+  // spec/prompts/company_matching.md [CANDIDATES] 블록 형태.
+  it('{{#each}} 블록을 배열 길이만큼 반복하며 원소별 필드를 치환한다', () => {
+    const template = '[CANDIDATES]\n{{#each candidates}}\n- {{id}}: {{name}}\n{{/each}}';
+    const result = renderPromptTemplate(
+      template,
+      {},
+      {
+        candidates: [
+          { id: '1', name: '노루페인트' },
+          { id: '2', name: '노루홀딩스' },
+        ],
+      },
+    );
+    expect(result).toBe('[CANDIDATES]\n- 1: 노루페인트\n- 2: 노루홀딩스');
+  });
+
+  it('{{#each}} 배열이 비어있으면 아무것도 출력하지 않는다', () => {
+    const result = renderPromptTemplate('[A]\n{{#each xs}}\n{{x}}\n{{/each}}\n[B]', {}, { xs: [] });
+    expect(result).toBe('[A]\n\n[B]');
+  });
+
+  it('바깥 변수와 {{#each}} 블록을 함께 치환한다', () => {
+    const template = 'headline: {{headline}}\n{{#each xs}}\n- {{x}}\n{{/each}}';
+    const result = renderPromptTemplate(
+      template,
+      { headline: '제목' },
+      { xs: [{ x: 'a' }, { x: 'b' }] },
+    );
+    expect(result).toBe('headline: 제목\n- a\n- b');
+  });
 });

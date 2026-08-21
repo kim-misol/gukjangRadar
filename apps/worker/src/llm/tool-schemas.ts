@@ -28,6 +28,64 @@ export const SUMMARY_TOOL: { name: string; description: string; inputSchema: Too
   },
 };
 
+export const COMPANY_MATCHING_TOOL: {
+  name: string;
+  description: string;
+  inputSchema: Tool.InputSchema;
+} = {
+  name: 'emit_judgements',
+  description: '제시된 후보 기업 각각에 대한 연결 심사 결과',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['judgements'],
+    properties: {
+      judgements: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: [
+            'company_id',
+            'verdict',
+            'connection_type',
+            'business_relevance',
+            'meme',
+            'confidence',
+            'explanation',
+          ],
+          properties: {
+            company_id: { type: 'integer' },
+            verdict: { type: 'string', enum: ['ACCEPT', 'REJECT'] },
+            connection_type: {
+              type: 'string',
+              enum: [
+                'DIRECT',
+                'SUPPLY_CHAIN',
+                'THEME',
+                'PERSON',
+                'PRODUCT',
+                'LOCATION',
+                'EVENT',
+                'KEYWORD',
+                'NAME_MATCH',
+                'AFFILIATION',
+                'MEME',
+              ],
+            },
+            business_relevance: { type: 'integer', minimum: 0, maximum: 100 },
+            meme: { type: 'integer', minimum: 0, maximum: 100 },
+            confidence: { type: 'integer', minimum: 0, maximum: 100 },
+            explanation: { type: 'string', maxLength: 60 },
+            caution: { type: ['string', 'null'], maxLength: 80 },
+            used_path_steps: { type: 'array', items: { type: 'integer' } },
+          },
+        },
+      },
+    },
+  },
+};
+
 export const ENTITY_EXTRACTION_TOOL: {
   name: string;
   description: string;
