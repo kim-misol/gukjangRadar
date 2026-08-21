@@ -495,6 +495,22 @@ export const connectionFeedback = pgTable(
   ],
 );
 
+// C12(V1.1) 저장/북마크 — docs/19-remaining-work.md §3. connection(연결) 단위로 저장한다.
+export const bookmark = pgTable(
+  'bookmark',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: bigint('user_id', { mode: 'number' })
+      .notNull()
+      .references(() => appUser.id, { onDelete: 'cascade' }),
+    connectionId: bigint('connection_id', { mode: 'number' })
+      .notNull()
+      .references(() => connection.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('bookmark_user_connection_uq').on(t.userId, t.connectionId)],
+);
+
 // 사용자 제보 = 공개 탐색 큐 (PRD D2: 1:1 응답 금지)
 export const discoveryRequest = pgTable('discovery_request', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),

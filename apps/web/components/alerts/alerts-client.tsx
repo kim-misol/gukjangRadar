@@ -103,6 +103,9 @@ export function AlertsClient({ initialAlerts, vapidPublicKey }: AlertsClientProp
   return (
     <div className="space-y-6">
       <div className="flex justify-end gap-3 font-mono text-[11px] text-ink-soft">
+        <a href="/bookmarks" className="underline underline-offset-2">
+          북마크
+        </a>
         <button type="button" onClick={logout} className="underline underline-offset-2">
           로그아웃
         </button>

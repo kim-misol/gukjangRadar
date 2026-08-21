@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { buildPathPreview } from '../../lib/format/path-preview';
 import { cn } from '../../lib/utils';
+import { BookmarkButton } from '../ui/bookmark-button';
 import { ConnectionTypeBadge } from '../ui/connection-type-badge';
 import { RelevanceBandBadge } from '../ui/relevance-band-badge';
 import { PathSteps } from './path-steps';
@@ -17,7 +18,16 @@ const RELEVANCE_NOTE: Record<ConnectionDto['relevanceBand'], string> = {
 };
 
 /** docs/05-screen-specs.md S4 §2~4 — 오늘의 연결 카드 목록 + 선택한 연결의 경로/연관성. */
-export function StockConnectionsPanel({ connections }: { connections: ConnectionDto[] }) {
+export function StockConnectionsPanel({
+  connections,
+  bookmarkedIds = new Set(),
+  loggedIn = false,
+}: {
+  connections: ConnectionDto[];
+  /** C12(V1.1) — 이미 저장된 연결 id 집합. 서버 컴포넌트가 로그인 상태일 때만 채워 넘긴다. */
+  bookmarkedIds?: ReadonlySet<number>;
+  loggedIn?: boolean;
+}) {
   const [selectedId, setSelectedId] = useState<number | null>(connections[0]?.id ?? null);
 
   if (connections.length === 0) {
@@ -45,7 +55,14 @@ export function StockConnectionsPanel({ connections }: { connections: Connection
             >
               <div className="flex items-center justify-between gap-2">
                 <ConnectionTypeBadge type={c.type} />
-                <span className="font-mono text-xs text-ink">연결 {c.scores.connection}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-ink">연결 {c.scores.connection}</span>
+                  <BookmarkButton
+                    connectionId={c.id}
+                    initialBookmarked={bookmarkedIds.has(c.id)}
+                    loggedIn={loggedIn}
+                  />
+                </span>
               </div>
               <p className="mt-1 font-mono text-[11px] text-ink-soft">{buildPathPreview(c.path)}</p>
               <Link

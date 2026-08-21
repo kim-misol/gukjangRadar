@@ -23,6 +23,7 @@
     "manual-verify-counter-check": "tsx scripts/manual-verify-counter-check.ts",
     "manual-verify-market-snapshot": "tsx scripts/manual-verify-market-snapshot.ts",
     "manual-verify-w8-alerts": "tsx scripts/manual-verify-w8-alerts.ts",
+    "manual-verify-bookmarks": "tsx scripts/manual-verify-bookmarks.ts",
     "golden": "tsx scripts/run-golden.ts",
     "db:generate": "pnpm --filter @gukjang/db generate",
     "db:migrate": "pnpm --filter @gukjang/db migrate",

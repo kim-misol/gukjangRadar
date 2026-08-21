@@ -1,6 +1,7 @@
 'use client';
 
 import type { GraphDto, GraphEdgeDto, GraphNodeDto } from '@gukjang/spec';
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { connectedNodeAndEdgeIds } from '../../lib/graph/highlight';
 import { layoutGraph, type Point } from '../../lib/graph/layout';
@@ -214,7 +215,7 @@ export function ConnectionGraph({
               onClick={() => {
                 onSelectNode?.(selectedNodeId === node.id ? null : node.id);
                 setSelectedEdge(null);
-                setPanelNode(node.kind === 'COMPANY' ? node : null);
+                setPanelNode(node.kind === 'COMPANY' || node.kind === 'ENTITY' ? node : null);
               }}
             >
               <NodeShape kind={node.kind} selected={selected} />
@@ -264,7 +265,26 @@ export function ConnectionGraph({
           <p className="font-serif text-sm font-bold">
             {panelNode.label} {panelNode.ticker && `(${panelNode.ticker})`}
           </p>
-          <p className="mt-1 text-ink-soft">종목 상세는 다음 스텝(W7)에서 이어집니다.</p>
+          {panelNode.ticker && (
+            <Link
+              href={`/stock/${panelNode.ticker}`}
+              className="mt-1 inline-block text-ink-soft underline underline-offset-2"
+            >
+              종목 상세 보기
+            </Link>
+          )}
+        </div>
+      )}
+
+      {panelNode && panelNode.kind === 'ENTITY' && (
+        <div className="mt-2 border border-rule-strong bg-paper p-3 font-sans text-xs text-ink">
+          <p className="font-serif text-sm font-bold">{panelNode.label}</p>
+          <Link
+            href={`/entity/${panelNode.refId}`}
+            className="mt-1 inline-block text-ink-soft underline underline-offset-2"
+          >
+            이 개체가 등장한 다른 연결 보기
+          </Link>
         </div>
       )}
 

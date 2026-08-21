@@ -15,6 +15,7 @@ import type {
   ConnectionState,
   Evidence,
   EntityBrief,
+  EntityDetailDto,
   GraphDto,
   HomeDto,
   MarketReaction,
@@ -685,6 +686,24 @@ async function edgeFactsForPaths(db: Db, connections: ConnectionDto[]): Promise<
   }));
 }
 
+/**
+ * graph_node.id(경로 노드 id) → entity.id. C9 개체 허브(V1.1, docs/19 §3) 링크가 정확한
+ * entity.id를 가리키려면 필요하다 — ENTITY 노드는 `ensureGraphNode`가 생성 시점에
+ * `ref_id`를 그대로 entity.id로 넣어두므로(apps/worker/src/graph/ensure-node.ts) 조회만
+ * 하면 된다.
+ */
+async function entityIdsForNodeIds(
+  db: Db,
+  nodeIds: readonly number[],
+): Promise<Map<number, number>> {
+  if (nodeIds.length === 0) return new Map();
+  const rows = await db
+    .select({ id: schema.graphNode.id, refId: schema.graphNode.refId })
+    .from(schema.graphNode)
+    .where(and(eq(schema.graphNode.kind, 'ENTITY'), inArray(schema.graphNode.id, [...nodeIds])));
+  return new Map(rows.map((r) => [r.id, r.refId]));
+}
+
 /** GET /v1/news/{clusterId}/graph — spec/openapi.yaml. docs/05-screen-specs.md S3(제품 핵심). */
 export async function getGraphForCluster(
   db: Db,
@@ -704,12 +723,15 @@ export async function getGraphForCluster(
     .sort((a, b) => b.scores.connection - a.scores.connection);
 
   const edgeFacts = await edgeFactsForPaths(db, connections);
+  const allNodeIds = connections.flatMap((c) => c.path.map((s) => s.nodeId));
+  const entityIdByNodeId = await entityIdsForNodeIds(db, allNodeIds);
 
   return buildClusterGraph(
     { id: row.id, headline: row.headline },
     connections,
     edgeFacts,
     opts.maxNodes ?? 60,
+    entityIdByNodeId,
   );
 }
 
@@ -825,6 +847,74 @@ export async function getConnectionsForStock(
   };
 
   return rows.map((r) => toConnectionDto({ ...r, company: companyBrief, market: null }));
+}
+
+/**
+ * C9 개체 허브(V1.1, docs/19 §3) — 이 개체가 `connection.anchor_entity_id`인 연결 전부를
+ * 역방향 조회한다(R1: 없으면 정직하게 빈 배열, getConnectionsForStock과 같은 원칙).
+ */
+export async function getEntityDetail(db: Db, entityId: number): Promise<EntityDetailDto | null> {
+  const [entityRow] = await db.select().from(schema.entity).where(eq(schema.entity.id, entityId));
+  if (!entityRow) return null;
+
+  const rows = await db
+    .select({
+      id: schema.connection.id,
+      clusterId: schema.connection.clusterId,
+      connectionType: schema.connection.connectionType,
+      businessRelevanceScore: schema.connection.businessRelevanceScore,
+      keywordMatchScore: schema.connection.keywordMatchScore,
+      supplyChainScore: schema.connection.supplyChainScore,
+      marketReactionScore: schema.connection.marketReactionScore,
+      memeScore: schema.connection.memeScore,
+      confidenceScore: schema.connection.confidenceScore,
+      connectionScore: schema.connection.connectionScore,
+      relevanceBand: schema.connection.relevanceBand,
+      path: schema.connection.path,
+      hopCount: schema.connection.hopCount,
+      explanation: schema.connection.explanation,
+      caution: schema.connection.caution,
+      counterEvidence: schema.connection.counterEvidence,
+      dataSources: schema.connection.dataSources,
+      status: schema.connection.status,
+      companyId: schema.company.id,
+      companyTicker: schema.company.ticker,
+      companyName: schema.company.name,
+      companyMarket: schema.company.market,
+      companySector: schema.company.sector,
+    })
+    .from(schema.connection)
+    .innerJoin(schema.company, eq(schema.company.id, schema.connection.companyId))
+    .where(
+      and(
+        eq(schema.connection.anchorEntityId, entityId),
+        inArray(schema.connection.status, VISIBLE_STATUSES),
+      ),
+    )
+    .orderBy(desc(schema.connection.connectionScore));
+
+  const connections = rows.map((r) =>
+    toConnectionDto({
+      ...r,
+      company: {
+        id: r.companyId,
+        ticker: r.companyTicker,
+        name: r.companyName,
+        market: r.companyMarket,
+        sector: r.companySector,
+      },
+      market: null,
+    }),
+  );
+
+  return {
+    id: entityRow.id,
+    name: entityRow.name,
+    kind: entityRow.kind,
+    subtype: entityRow.subtype,
+    mentionTotal: entityRow.mentionTotal,
+    connections,
+  };
 }
 
 /** OG 이미지(`/api/og/connection/{id}`)용 단건 조회. */

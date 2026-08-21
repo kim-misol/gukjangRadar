@@ -38,6 +38,7 @@ export function buildClusterGraph(
   connectionsSortedByScoreDesc: ConnectionDto[],
   edgeFacts: EdgeFactRow[],
   maxNodes = 60,
+  entityIdByNodeId: ReadonlyMap<number, number> = new Map(),
 ): GraphDto {
   const edgeFactMap = new Map(
     edgeFacts.map((f) => [edgeKey(f.srcNodeId, f.dstNodeId, f.edgeType), f]),
@@ -59,18 +60,22 @@ export function buildClusterGraph(
   let edgeIdSeq = 1;
   let truncated = false;
 
-  // ENTITY/CONCEPT는 connection.path에 entity.id/concept.id가 없어(그래프 노드 id만 있음)
-  // refId를 정확히 채울 수 없다 — 이번 주는 그래프 노드 id로 근사한다(현재 아무 소비자도
-  // refId를 참조하지 않음, V1.1 /entity/[entityId] 허브가 생기면 정확히 채워야 한다).
+  // CONCEPT는 connection.path에 concept.id가 없어(그래프 노드 id만 있음) refId를 정확히
+  // 채울 수 없다 — 그래프 노드 id로 근사한다(V1.1 개념 허브가 생기면 ENTITY와 같은 방식으로
+  // 고칠 것). ENTITY는 graph_node.ref_id가 그대로 entity.id라 entityIdByNodeId로 정확히
+  // 채운다(V1.1 /entity/[entityId] 허브, docs/19 §3에서 실제로 이 값을 쓴다).
   const addNode = (
     step: { nodeId: number; kind: NodeKind; label: string },
     company?: { id: number; ticker: string },
   ) => {
     if (!nodes.has(step.nodeId)) {
+      let refId = step.nodeId;
+      if (step.kind === 'COMPANY' && company) refId = company.id;
+      else if (step.kind === 'ENTITY') refId = entityIdByNodeId.get(step.nodeId) ?? step.nodeId;
       nodes.set(step.nodeId, {
         id: step.nodeId,
         kind: step.kind,
-        refId: step.kind === 'COMPANY' && company ? company.id : step.nodeId,
+        refId,
         label: step.label,
         ticker: step.kind === 'COMPANY' ? company?.ticker : undefined,
         lane: LANE[step.kind],

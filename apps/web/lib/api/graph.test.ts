@@ -70,6 +70,24 @@ describe('buildClusterGraph', () => {
     expect(companyNode?.ticker).toBe('090350');
   });
 
+  it('entityIdByNodeId를 주면 ENTITY 노드 refId를 실제 entity.id로 채운다 (C9 개체 허브 링크용)', () => {
+    const graph = buildClusterGraph(
+      cluster,
+      [makeConnection()],
+      [],
+      60,
+      new Map([[2, 42]]), // graph_node.id=2("노루") → entity.id=42
+    );
+    const entityNode = graph.nodes.find((n) => n.id === 2);
+    expect(entityNode?.refId).toBe(42);
+  });
+
+  it('entityIdByNodeId에 없는 ENTITY 노드는 그래프 노드 id로 근사한다 (기존 동작 유지)', () => {
+    const graph = buildClusterGraph(cluster, [makeConnection()], []);
+    const entityNode = graph.nodes.find((n) => n.id === 1);
+    expect(entityNode?.refId).toBe(1);
+  });
+
   it('실제 graph_edge 사실(weight/confidence/evidence)이 있으면 그대로 쓴다', () => {
     const graph = buildClusterGraph(
       cluster,

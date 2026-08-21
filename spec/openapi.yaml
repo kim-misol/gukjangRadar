@@ -337,6 +337,29 @@ paths:
                     auth: { type: string }
       responses: { '201': { description: 구독 등록 } }
 
+  /v1/entities/{entityId}:
+    get:
+      tags: [news]
+      summary: C9 개체 허브(V1.1, docs/19-remaining-work.md §3) — 이 개체가 anchor인 연결 전부(역방향)
+      parameters:
+        - { name: entityId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, kind, subtype, mentionTotal, connections]
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  kind: { type: string, enum: [PERSON, ORG, PLACE, PRODUCT, EVENT, BRAND, WORD, TIME, NUMBER, OTHER] }
+                  subtype: { type: [string, 'null'] }
+                  mentionTotal: { type: integer }
+                  connections: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /v1/analytics/events:
     post:
       summary: T5.3 분석 이벤트 스텁 싱크(실 프로바이더 미정, docs/15 W8) — sendBeacon 전송 대상
@@ -352,6 +375,35 @@ paths:
                 payload: { type: object, additionalProperties: true }
                 ts: { type: string, format: date-time }
       responses: { '204': { description: 수신됨(비동기 처리, 실패해도 UX에 영향 없음) } }
+
+  /v1/bookmarks:
+    get:
+      tags: [alerts]
+      summary: C12 저장/북마크(V1.1, docs/19-remaining-work.md §3) — 내가 저장한 연결 목록
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Connection' } }
+
+  /v1/connections/{connectionId}/bookmark:
+    post:
+      tags: [alerts]
+      summary: 연결 저장(C12, V1.1)
+      security: [ { bearerAuth: [] } ]
+      parameters: [ { name: connectionId, in: path, required: true, schema: { type: integer } } ]
+      responses: { '201': { description: 저장됨(이미 저장돼 있었어도 멱등하게 201) } }
+    delete:
+      tags: [alerts]
+      summary: 연결 저장 해제(C12, V1.1)
+      security: [ { bearerAuth: [] } ]
+      parameters: [ { name: connectionId, in: path, required: true, schema: { type: integer } } ]
+      responses: { '204': { description: 해제됨 } }
 
   /v1/connections/{connectionId}/feedback:
     post:
@@ -412,6 +464,23 @@ paths:
                       byModel: { type: array, items: { type: object, additionalProperties: true } }
                       byStatus: { type: array, items: { type: object, additionalProperties: true } }
                   last7Days: { type: array, items: { type: object, additionalProperties: true } }
+
+  /v1/admin/pipeline-health:
+    get:
+      tags: [admin]
+      security: [ { bearerAuth: [] } ]
+      summary: T4.3(D4) 파이프라인 대시보드 — 큐 적체/실패 + 오늘 가드레일 위반
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queues: { type: array, items: { type: object, additionalProperties: true } }
+                  guardrailViolationsToday: { type: array, items: { type: object, additionalProperties: true } }
+                  recentFailedJobs: { type: array, items: { type: object, additionalProperties: true } }
 
   /v1/admin/connections/{connectionId}/review:
     post:

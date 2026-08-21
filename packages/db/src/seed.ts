@@ -127,6 +127,7 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { name: '반도체', kind: 'INDUSTRY' },
   { name: '도료', kind: 'INDUSTRY' },
   { name: '2차전지', kind: 'INDUSTRY' },
+  { name: '양극재', kind: 'MATERIAL' },
   { name: '자동차', kind: 'INDUSTRY' },
   { name: '인터넷플랫폼', kind: 'INDUSTRY' },
   { name: '바이오', kind: 'INDUSTRY' },
@@ -144,11 +145,19 @@ interface SeedConceptEdge {
 const SEED_CONCEPT_EDGES: SeedConceptEdge[] = [
   { from: 'AI가속기', to: 'HBM', edgeType: 'RELATED_CONCEPT', weight: 0.9 },
   { from: 'AI가속기', to: '반도체장비', edgeType: 'RELATED_CONCEPT', weight: 0.7 },
+  { from: '2차전지', to: '양극재', edgeType: 'RELATED_CONCEPT', weight: 0.8 },
 ];
-/** concept → company 공급망 엣지. company는 SEED_COMPANIES의 ticker로 찾는다. */
+/**
+ * concept → company 공급망 엣지. company는 SEED_COMPANIES의 ticker로 찾는다.
+ * A7(V1.1, docs/19 §3) — HBM/반도체장비 2건뿐이던 걸 실제로 잘 알려진 공급 관계
+ * (원익IPS 반도체장비, 에코프로비엠 양극재)로 소폭 확장. A6와 같은 이유로 21개 회사
+ * 안에서만 늘릴 수 있어 한계가 있다.
+ */
 const SEED_SUPPLY_CHAIN_EDGES: { conceptName: string; companyTicker: string; weight: number }[] = [
   { conceptName: 'HBM', companyTicker: '000660', weight: 0.85 },
   { conceptName: '반도체장비', companyTicker: '042700', weight: 0.7 },
+  { conceptName: '반도체장비', companyTicker: '240810', weight: 0.75 }, // 원익IPS
+  { conceptName: '양극재', companyTicker: '247540', weight: 0.85 }, // 에코프로비엠
 ];
 /**
  * concept → company 소속(테마) 엣지 — A6(docs/19 §2). 순수 산업 분류이지 공급망 관계가
@@ -158,7 +167,8 @@ const SEED_SUPPLY_CHAIN_EDGES: { conceptName: string; companyTicker: string; wei
 const SEED_THEME_EDGES: { conceptName: string; companyTicker: string; weight: number }[] = [
   { conceptName: '반도체', companyTicker: '005930', weight: 0.9 }, // 삼성전자
   { conceptName: '반도체', companyTicker: '000660', weight: 0.9 }, // SK하이닉스
-  { conceptName: '반도체장비', companyTicker: '240810', weight: 0.85 }, // 원익IPS
+  // 원익IPS는 SEED_SUPPLY_CHAIN_EDGES(반도체장비)로 옮김 — 한미반도체와 같은 성격(장비
+  // 공급사)이라 BELONGS_TO(산업 소속)보다 SUPPLY_CHAIN(공급 관계)이 더 정확하다.
   { conceptName: '도료', companyTicker: '090350', weight: 0.9 }, // 노루페인트
   { conceptName: '2차전지', companyTicker: '373220', weight: 0.9 }, // LG에너지솔루션
   { conceptName: '2차전지', companyTicker: '086520', weight: 0.8 }, // 에코프로

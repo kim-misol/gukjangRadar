@@ -20,12 +20,11 @@
 | 도메인/HTTPS/백업 정책 | 미정 |
 
 ## 1. Git / CI — 지금 당장 확인할 것
-- **로컬 `main`이 `origin/main`보다 2커밋 앞서 있다(push 안 됨)**: `feat(W6-W7)`, `feat(W8)`.
-  즉 `.github/workflows/golden.yml`(PR마다 골든셋 자동 실행 + 코멘트, W7에 만듦)이
-  **한 번도 실제로 실행된 적이 없다** — 로컬에서 `pnpm golden`으로만 확인했다. push/PR을
-  만들어야 CI가 실제로 도는 걸 처음 확인하게 된다.
-- `ci.yml`도 이 리포에서 실제로 GitHub Actions 상에서 통과하는지 아직 못 봤다(로컬
-  `make ci`로만 확인).
+- **로컬 `main`이 `origin/main`보다 커밋이 앞서 있다(push 안 됨, 사용자가 명시적으로 보류
+  요청함)** — 즉 `.github/workflows/golden.yml`(PR마다 골든셋 자동 실행 + 코멘트, W7에
+  만듦)이 **한 번도 실제로 실행된 적이 없다**. 로컬에서 `pnpm golden`/`make ci`로만 확인했다.
+  push/PR을 만들어야 CI가 실제로 도는 걸 처음 확인하게 된다.
+- `ci.yml`도 이 리포에서 실제로 GitHub Actions 상에서 통과하는지 아직 못 봤다.
 
 ## 2. M(V1 필수) — 2026-08-21 백로그 정리에서 전부 처리함
 `docs/04-mvp-features.md`가 Must로 매긴 항목 중 비어 있던 3개를 우선순위대로 처리했다
@@ -38,12 +37,20 @@
 | A6 | 산업/테마 사전(초기 수기 300~500개) | M | 🔶 `concept` 3→13행, `BELONGS_TO` 엣지 2→19건으로 확장(실 DB에 있는 21개 회사 전부 커버). **300~500개 목표는 여전히 미달** — `company` 테이블이 21개뿐이라(T1.1.1 KRX 수집기가 이 샌드박스에서 막혀 있음, §4) 사전을 더 늘려도 참조할 회사가 없다 |
 | D5 | LLM 비용 모니터 | M | ✅ `GET /v1/admin/llm-costs` + `/admin/costs` 페이지, 실 데이터로 확인 완료. SKIPPED(상한 초과로 건너뛴 호출)는 애초에 기록 자체가 안 남아 모니터에도 안 잡힘(§5) |
 
-## 3. S(V1.1)로 이미 정해져 있어 지금 안 만들어도 되는 것 (참고용)
-확인만 해두고 지금 손대지 않아도 되는 항목 — 착수 순서에서 혼동 없게 기록.
-- A7 공급망 관계 DB 확장(현재 `graph_edge` SUPPLY_CHAIN 2건뿐), B7 과거 유사 사례 매칭,
-  B8 임베딩 기반 테마 확장(EMBEDDING recall 룰), C9 개체 허브 `/entity/[id]`,
-  C12 저장/북마크, D4 파이프라인 대시보드(지연·실패·비용)
-- (C10 사용자 제보는 S등급이지만 이미 W7에서 만들어짐 — 등급보다 먼저 배송된 케이스)
+## 3. S(V1.1) — 2026-08-21 순서대로 이어서 처리(외부 계정이 필요 없는 것 전부)
+`docs/04-mvp-features.md` S등급 중 외부 계정/제공자 결정 없이 만들 수 있는 건 전부 처리했다.
+남은 두 개(B7/B8)는 코드 문제가 아니라 **임베딩 공급자를 아직 못 정해서** 의도적으로
+건너뛴다 — W3/W4/W5 내내 같은 이유로 미뤄져 왔던 결정이라 여기서도 임의로 고르지 않았다.
+
+| ID | 기능 | 상태 |
+|---|---|---|
+| D4 | 파이프라인 대시보드(지연·실패·비용) | ✅ `GET /v1/admin/pipeline-health` + `/admin/pipeline` — BullMQ 5개 큐의 waiting/active/completed/failed/delayed를 apps/web이 Redis에 직접 붙어 조회(docs/07 §6이 원래 워커 내부 API로 설계해 뒀지만, BFF가 이미 postgres에 직접 붙는 것과 같은 원칙으로 단순화). 오늘 가드레일 위반 + 최근 실패 잡 10건도 같이 보여줌. 비용(D5)은 이미 별도 화면 있음 |
+| C9 | 개체 허브 `/entity/[id]` | ✅ 실 DB로 확인(entity 4 "AI 가속기" → 실 연결 24건). `connection.anchor_entity_id` 역방향 조회, `StockConnectionsPanel`(종목 상세와 동일 컴포넌트) 재사용. 그래프에서 COMPANY 노드를 눌렀을 때 나오던 "종목 상세는 다음 스텝(W7)에서" 문구가 W7 이후로도 안 고쳐져 있던 걸 발견해 실제 링크로 고침(김에 ENTITY 노드도 이 화면으로 링크) |
+| C12 | 저장/북마크 | ✅ `bookmark` 테이블 신설(스키마+마이그레이션 0004+spec/types.ts 같은 커밋). 뉴스가 아니라 **connection(연결) 단위**로 저장 — "국장레이더는 연결을 보여주는 서비스"라는 정체성 그대로. `/bookmarks` 페이지, `pnpm manual-verify-bookmarks`로 생성·멱등(중복 POST)·삭제까지 실 DB 확인 |
+| A7 | 공급망 관계 DB 확장 | 🔶 A6와 같은 21개 회사 한계 안에서 소폭 확장(SUPPLY_CHAIN 2→4건 — 원익IPS/에코프로비엠 추가, 양극재 concept 신설). 그 과정에서 원익IPS가 BELONGS_TO(테마)와 SUPPLY_CHAIN(공급망) 양쪽에 중복으로 들어간 걸 발견해 SUPPLY_CHAIN 하나로 정리(한미반도체와 같은 성격의 회사라 그쪽이 맞음) |
+| B7/B8 | 과거 유사 사례 매칭 / 임베딩 테마 확장 | ⏭️ **의도적으로 건너뜀** — 둘 다 임베딩 공급자가 있어야 하는데(pgvector 컬럼은 이미 있음, `entity.embedding`) 어떤 공급자를 쓸지 이 세션에서 결정할 수 없는 사안이다. 사용자가 공급자(예: OpenAI/Voyage 등, 비용 발생)를 정하면 그때 착수 |
+
+(C10 사용자 제보는 S등급이지만 이미 W7에서 만들어짐 — 등급보다 먼저 배송된 케이스, 참고용)
 
 ## 4. 코어 파이프라인 — 그 외 미룬 것 (EPIC 1/2)
 - **PERSON_DICT 사전 데이터 없음** — 인물→임원/최대주주 매핑. 임원 데이터 자체가 없어 코드
@@ -93,8 +100,9 @@
 - **`docs/17-screen-design-guide.md` 자체 결함** — 문서가 참조하는 원본 소스
   (`design/main-desktop.dc.html` 등)가 리포 어디에도 없고 캔버스 링크도 죽어 있음. 문서
   정정(참조 제거 또는 소스 복구) 안 함.
-- **그래프 노드 `refId`(ENTITY/CONCEPT)가 근사치** — `connection.path`에 정확한 FK가 없어
-  그래프 노드 id로 대체 중. C9 개체 허브가 생기면 정확히 채워야 함.
+- **그래프 노드 `refId`(CONCEPT만 남음)가 근사치** — `connection.path`에 concept.id가 없어
+  그래프 노드 id로 대체 중(ENTITY는 2026-08-21에 실제 entity.id로 고쳤음, §3 C9). V1.1
+  개념 허브가 생기면 CONCEPT도 같은 방식으로 고칠 것.
 - **`next/font/google` 실 배포 환경 안정성 미확인** — 이 개발 환경(샌드박스)에서는 재시도 끝에
   성공했지만, 이전 주차엔 KRX/DART 같은 외부망이 막혀 있었던 전례가 있어 실 배포 환경에서
   빌드가 안정적인지 별도 확인 필요.

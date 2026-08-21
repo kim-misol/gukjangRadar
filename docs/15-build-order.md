@@ -801,6 +801,62 @@ $2.01)가 그대로 집계돼 나오는 것까지 봤다. **미룬 것**: 일일
 **검증(백로그 정리 3건)**: `make ci` 클린 통과(format-check/lint/typecheck/test 395건
 (core 298+web 49+worker 48)/check-enum-sync/lint-forbidden-words 190개 파일).
 
+**백로그 정리 2차 — S(V1.1) 중 외부 계정 없이 되는 것 전부 (2026-08-21 계속)**:
+`docs/19-remaining-work.md` §3을 순서대로 이어서 처리했다. B7(과거 유사 사례)/B8(임베딩
+테마 확장)만 임베딩 공급자 미정이라 의도적으로 건너뜀 — W3부터 같은 이유로 계속 미뤄진
+결정이라 여기서 임의로 고르지 않았다.
+
+- **D4 파이프라인 대시보드**: `GET /v1/admin/pipeline-health` + `/admin/pipeline`. docs/07
+  §6은 원래 워커 내부 API(`GET /internal/health` + `X-Internal-Token`)로 설계해 뒀지만,
+  apps/web이 이미 BFF로 postgres에 직접 붙는 것과 같은 원칙으로 Redis에도 직접 붙는 쪽을
+  택했다(`bullmq`/`ioredis`를 apps/web에 신규 의존성으로 추가) — 워커를 거치는 내부 HTTP
+  계층 + 토큰 스킴을 새로 만들 필요가 없었다. BullMQ 5개 큐(docs/11 §1)의 waiting/active/
+  completed/failed/delayed + 오늘 가드레일 위반 집계 + 최근 실패 잡 10건. **실 검증 중
+  실제 장애를 하나 발견했다**: 이 세션에 web/worker 프로세스를 여러 번 껐다 켰다 하면서
+  좀비 프로세스가 남아(포트 재사용 실패로 재시작이 반복됨) 로컬 postgres 커넥션 슬롯이
+  고갈돼 "remaining connection slots are reserved for roles with the SUPERUSER attribute"
+  에러가 실제 `failed` 잡으로 대시보드에 잡혔다 — 스트레이 프로세스를 정리하고 나니 해소됨
+  (제품 결함이 아니라 이 세션 자체의 리소스 정리 문제였음, 정직하게 기록).
+- **C9 개체 허브 `/entity/[entityId]`**: `connection.anchor_entity_id` 역방향 조회
+  (`getEntityDetail`, R1 — 없으면 빈 배열). 종목 상세와 똑같은 `StockConnectionsPanel`을
+  재사용해 화면을 새로 안 만들었다. 실 DB entity #4("AI 가속기")로 확인 — 실제 연결 24건이
+  정확히 나옴. **이 작업 중 실제 버그를 하나 발견해 고쳤다**: 연결 그래프에서 COMPANY 노드를
+  누르면 뜨는 패널이 "종목 상세는 다음 스텝(W7)에서 이어집니다"라는 문구를 그대로 띄우고
+  있었다 — W7이 이미 몇 세션 전에 끝나 `/stock/[ticker]`가 실제로 있는데도 안 고쳐져 있던
+  스테일 placeholder였다. 실제 링크로 바꾸고, 같은 김에 ENTITY 노드도 이 새 화면으로 링크했다.
+  - **그 링크를 만들다가 또 다른 실제 버그를 발견**: 그래프 DTO의 ENTITY 노드 `refId`가
+    W6부터 "connection.path에 entity.id가 없어 그래프 노드 id로 근사한다"는 주석과 함께
+    그래프 노드 id를 그대로 쓰고 있었다 — 그 근사치로 `/entity/{refId}` 링크를 만들면 엉뚱한
+    개체 페이지로 가거나 404가 난다. 확인해 보니 `graph_node.ref_id`는 애초에 생성 시점
+    (`ensureGraphNode(db,'ENTITY',entity.id,...)`)에 진짜 entity.id를 담고 있어서, `lib/api/
+    graph.ts`의 `buildClusterGraph`(순수 함수)에 `entityIdByNodeId` 맵을 새 파라미터로 받게
+    하고 호출부(`getGraphForCluster`)가 `graph_node` 조회로 그 맵을 채워 넘기도록 고쳤다.
+    유닛테스트 2건 추가, 실 클러스터(#89)로 `/api/v1/news/89/graph` 응답의 ENTITY 노드
+    refId가 실제로 4("AI 가속기")로 나오는 것까지 확인 — entity #4 페이지와 정확히 일치.
+    CONCEPT 노드는 아직 같은 근사치를 쓴다(개념 허브가 없어 지금은 아무도 안 씀, docs/19 §6에
+    남김).
+- **C12 저장/북마크**: `bookmark` 테이블 신설 — `spec/schema.sql` + 마이그레이션
+  (`drizzle/0004_calm_lockheed.sql`) + `packages/db/src/schema.ts` + `spec/types.ts`를
+  같은 커밋에서 함께 고쳤다(CLAUDE.md §4-3). 뉴스가 아니라 **connection(연결) 단위**로
+  저장하기로 설계했다 — "국장레이더는 연결을 보여주는 서비스"라는 정체성(CLAUDE.md 0)을
+  그대로 따른 것. `POST/DELETE /v1/connections/{id}/bookmark` + `GET /v1/bookmarks` +
+  `/bookmarks` 페이지(로그인 게이트, `/alerts`와 같은 패턴) + `BookmarkButton`(★/☆, 로그인
+  안 했으면 안내만). `StockConnectionsPanel`(종목 상세+개체 허브 공용)에 북마크 버튼을
+  추가해 한 컴포넌트 수정으로 두 화면에 동시 적용됨. `pnpm manual-verify-bookmarks` 신설 —
+  실 DB로 생성→멱등(중복 POST해도 행 1개)→목록 조회→삭제까지 전부 확인.
+- **A7 공급망 관계 DB 확장**: A6와 같은 21개 회사 한계 안에서 소폭 확장 — `SUPPLY_CHAIN`
+  엣지 2→4건(원익IPS "반도체장비", 에코프로비엠 "양극재" 신설 concept). **이 과정에서 A6
+  때 만든 분류 오류를 하나 발견해 고쳤다**: 원익IPS를 A6에서 `BELONGS_TO`(테마 소속)로
+  넣었었는데, 한미반도체와 똑같은 반도체 장비 공급사라 `SUPPLY_CHAIN`(공급 관계)이 맞는
+  분류였다 — `SUPPLY_CHAIN`으로 새로 추가하면서 기존 `BELONGS_TO` 엣지가 중복으로 남길래
+  (시드 스크립트는 upsert만 하고 삭제는 안 해서) `psql`로 직접 지웠다. "반도체장비 업체"
+  엔티티로 재검증해 원익IPS/한미반도체 둘 다 `SUPPLY_DICT`로 올바르게 recall되는 것,
+  "양극재 공급" 엔티티로 에코프로비엠이 `SUPPLY_DICT`로 recall되는 것 확인.
+
+**검증(백로그 정리 2차)**: `make ci` 클린 통과, `pnpm manual-verify-connections`/
+`pnpm manual-verify-bookmarks` 실 postgres로 재확인, `next build` 프로덕션 빌드 성공
+(41개 라우트), 실 서버로 D4/C9/C12 API·페이지 왕복 확인(토큰 없음 401, 정상 200, 404 케이스).
+
 ---
 ## 주차별 게이트 (통과 못 하면 다음 주로 넘어가지 않는다)
 | 주 | 게이트 |

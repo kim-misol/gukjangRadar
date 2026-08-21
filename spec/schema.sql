@@ -351,6 +351,16 @@ CREATE TABLE connection_feedback (
   UNIQUE (connection_id, anon_id)
 );
 
+-- C12(V1.1) 저장/북마크 — docs/19-remaining-work.md §3. 뉴스가 아니라 connection(연결) 단위로
+-- 저장한다 — "국장레이더는 연결을 보여주는 서비스"(CLAUDE.md 0)라는 정체성 그대로.
+CREATE TABLE bookmark (
+  id            bigserial PRIMARY KEY,
+  user_id       bigint NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+  connection_id bigint NOT NULL REFERENCES connection(id) ON DELETE CASCADE,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, connection_id)
+);
+
 -- 사용자 제보 = 공개 탐색 큐 (PRD D2: 1:1 응답 금지)
 CREATE TABLE discovery_request (
   id          bigserial PRIMARY KEY,

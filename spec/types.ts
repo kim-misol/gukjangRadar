@@ -305,6 +305,16 @@ export interface Candidate {
   pathEdgeWeights: number[];
 }
 
+/** C9 개체 허브(V1.1) — docs/19-remaining-work.md §3. 이 개체가 anchor인 연결 전부(R1: 역방향 조회, 없으면 빈 배열). */
+export interface EntityDetailDto {
+  id: number;
+  name: string;
+  kind: EntityKind;
+  subtype: string | null;
+  mentionTotal: number;
+  connections: ConnectionDto[];
+}
+
 // ─────────────────────────────────────────────
 // 인증 / 알림
 // ─────────────────────────────────────────────
