@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { levenshtein, jamoSimilarity, sharesFirstSyllable } from './similarity';
+import { levenshtein, jamoSimilarity, sharesFirstSyllable, jaccardSimilarity } from './similarity';
 
 describe('levenshtein', () => {
   it('동일 시퀀스는 거리 0', () => {
@@ -39,5 +39,28 @@ describe('sharesFirstSyllable', () => {
 
   it('첫 음절이 다르면 false', () => {
     expect(sharesFirstSyllable('노루', '원익')).toBe(false);
+  });
+});
+
+describe('jaccardSimilarity', () => {
+  it('동일 집합은 1', () => {
+    expect(jaccardSimilarity(['a', 'b', 'c'], ['a', 'b', 'c'])).toBe(1);
+  });
+
+  it('겹치지 않으면 0', () => {
+    expect(jaccardSimilarity(['a', 'b'], ['c', 'd'])).toBe(0);
+  });
+
+  it('부분 겹침은 |교집합|/|합집합|', () => {
+    // {a,b,c} ∩ {b,c,d} = {b,c}(2), ∪ = {a,b,c,d}(4) → 0.5
+    expect(jaccardSimilarity(['a', 'b', 'c'], ['b', 'c', 'd'])).toBe(0.5);
+  });
+
+  it('둘 다 빈 배열이면 1 (완전히 동일 취급)', () => {
+    expect(jaccardSimilarity([], [])).toBe(1);
+  });
+
+  it('중복 원소는 집합으로 취급한다', () => {
+    expect(jaccardSimilarity(['a', 'a', 'b'], ['a', 'b', 'b'])).toBe(1);
   });
 });

@@ -9,6 +9,7 @@
   "exports": {
     ".": "./types.ts",
     "./scoring.config.json": "./scoring.config.json",
+    "./news_sources.seed.json": "./news_sources.seed.json",
     "./golden/*": "./golden/*",
     "./prompts/*": "./prompts/*"
   }

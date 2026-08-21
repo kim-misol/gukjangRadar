@@ -25,7 +25,9 @@ LLM은 ⑤⑥⑨⑩ **네 곳에서만** 호출된다. 나머지는 전부 결�
 ## 2. 단계별 명세
 
 ### ① 수집 `news.collect`
-- 소스: 제휴 API 우선, 없으면 RSS. `news_source.tier`로 신뢰도 구분.
+> **소스 선정과 접근 방법은 `docs/16-news-sources.md`가 원본이다.** 여기서는 큐 동작만 다룬다.
+- A층(언론사 RSS 전량 스트림) + B층(Trends·시장 이상치·DART 공시 신호) + C층(네이버 검색 보강)을 각각 다른 주기로 폴링한다.
+- `news_source.tier`로 신뢰도 구분, `kind`로 수집기 분기.
 - 저장: 제목·URL·매체·발행시각·`lead`(200자, 요약 입력용 임시). **본문 저장 금지**(PRD D5).
 - 멱등 키: `url` UNIQUE. 이미 있으면 skip.
 - robots.txt 준수, 매체당 요청 간격 ≥ 1s.

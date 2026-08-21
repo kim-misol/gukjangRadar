@@ -152,6 +152,14 @@ export const newsSource = pgTable('news_source', {
   feedUrl: text('feed_url'),
   tier: smallint('tier').notNull().default(3),
   isActive: boolean('is_active').notNull().default(true),
+  kind: text('kind').notNull().default('RSS'),
+  pollIntervalS: integer('poll_interval_s').notNull().default(120),
+  etag: text('etag'),
+  lastModified: text('last_modified'),
+  lastPolledAt: timestamp('last_polled_at', { withTimezone: true }),
+  errorCount: integer('error_count').notNull().default(0),
+  termsCheckedAt: date('terms_checked_at'),
+  termsNote: text('terms_note'),
 });
 
 export const newsArticle = pgTable(

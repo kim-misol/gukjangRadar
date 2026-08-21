@@ -10,6 +10,7 @@
  */
 import { loadEnv, generateAliasCandidates, normalizeName, toJamo } from '@gukjang/core';
 import type { CompanyAliasInput } from '@gukjang/core';
+import newsSourcesSeed from '@gukjang/spec/news_sources.seed.json';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -80,11 +81,22 @@ const SEED_COMPANIES: SeedCompany[] = [
   { ticker: '247540', name: '에코프로비엠', market: 'KOSDAQ', sector: '화학' },
 ];
 
-const SEED_NEWS_SOURCES = [
-  { name: '연합뉴스', domain: 'yna.co.kr', tier: 1 },
-  { name: '한국경제', domain: 'hankyung.com', tier: 1 },
-  { name: '조선비즈', domain: 'biz.chosun.com', tier: 2 },
-];
+/**
+ * docs/16-news-sources.md에서 실 네트워크로 검증한 A/B/C층 소스 목록.
+ * spec/news_sources.seed.json이 단일 진실 원천 — 여기서 재정의하지 않는다(CLAUDE.md §3).
+ * verification이 "VERIFIED_"로 시작하거나 "DOCUMENTED"가 아닌 항목은 is_active를 강제로
+ * false로 덮는다 (재검증 전에는 폴링하지 않는다 — spec/news_sources.seed.json._readme 참고).
+ */
+const SEED_NEWS_SOURCES = newsSourcesSeed.sources.map((s) => ({
+  name: s.name,
+  domain: s.domain,
+  kind: s.kind,
+  feedUrl: s.feed_url,
+  tier: s.tier,
+  pollIntervalS: s.poll_interval_s,
+  isActive:
+    s.is_active && (s.verification.startsWith('VERIFIED') || s.verification === 'DOCUMENTED'),
+}));
 
 interface SeedNews {
   sourceIndex: number;
@@ -183,7 +195,7 @@ async function main(): Promise<void> {
       }
     }
 
-    // 뉴스 소스
+    // 뉴스 소스 (docs/16-news-sources.md — A/B/C층)
     const sourceIds: number[] = [];
     for (const s of SEED_NEWS_SOURCES) {
       const [row] = await tx
@@ -191,7 +203,14 @@ async function main(): Promise<void> {
         .values(s)
         .onConflictDoUpdate({
           target: schema.newsSource.name,
-          set: { domain: s.domain },
+          set: {
+            domain: s.domain,
+            kind: s.kind,
+            feedUrl: s.feedUrl,
+            tier: s.tier,
+            pollIntervalS: s.pollIntervalS,
+            isActive: s.isActive,
+          },
         })
         .returning({ id: schema.newsSource.id });
       if (!row) throw new Error(`뉴스 소스 upsert 실패: ${s.name}`);

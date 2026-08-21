@@ -84,5 +84,13 @@
     "hopCountAtLeast": 4,
     "ambiguousAlias": true,
     "counterCheckRefuted": true
+  },
+
+  "heatScore": {
+    "note": "docs/11-pipeline.md §2-④: heat_score = log_base(article_count)×coef + tierBonus + 속도×velocityCoef. connection_score(R6)와 무관한 '화제도' 지표 — 초기값이며 운영 데이터로 재보정 예정.",
+    "articleCountLogBase": 2,
+    "articleCountCoef": 20,
+    "tierBonus": { "1": 15, "2": 8, "3": 0 },
+    "velocityCoef": 5
   }
 }

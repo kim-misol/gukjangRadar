@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { loadEnv } from '@gukjang/core';
 import { HealthController } from './health/health.controller';
+import { PipelineModule } from './pipeline/pipeline.module';
 
 const env = loadEnv();
 const redisUrl = new URL(env.REDIS_URL);
@@ -14,7 +15,7 @@ const redisUrl = new URL(env.REDIS_URL);
         port: Number(redisUrl.port || 6379),
       },
     }),
-    // E2 파이프라인 큐는 실제 잡이 생기는 T2.1.1부터 registerQueue로 추가한다.
+    PipelineModule,
   ],
   controllers: [HealthController],
 })

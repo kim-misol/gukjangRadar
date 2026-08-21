@@ -100,12 +100,21 @@ CREATE TABLE concept (
 -- 뉴스 도메인
 -- ============================================================
 CREATE TABLE news_source (
-  id          serial PRIMARY KEY,
-  name        text NOT NULL UNIQUE,
-  domain      text NOT NULL,
-  feed_url    text,
-  tier        smallint NOT NULL DEFAULT 3,   -- 1=통신사/주요지 ... 3=기타
-  is_active   boolean  NOT NULL DEFAULT true
+  id               serial PRIMARY KEY,
+  name             text NOT NULL UNIQUE,
+  domain           text NOT NULL,
+  feed_url         text,
+  tier             smallint NOT NULL DEFAULT 3,   -- 1=통신사/주요지 ... 3=기타
+  is_active        boolean  NOT NULL DEFAULT true,
+  -- docs/16-news-sources.md §6: A(RSS)/B(TRENDS/DART/MARKET)/C(NAVER_SEARCH) 소스 구분·폴링 관리.
+  kind             text NOT NULL DEFAULT 'RSS',   -- RSS | TRENDS | DART | NAVER_SEARCH | MARKET
+  poll_interval_s  int  NOT NULL DEFAULT 120,
+  etag             text,
+  last_modified    text,
+  last_polled_at   timestamptz,
+  error_count      int  NOT NULL DEFAULT 0,       -- 연속 실패 10회 → is_active=false (docs/16 §1)
+  terms_checked_at date,
+  terms_note       text
 );
 
 -- 본문 미저장 (저작권). 제목/링크/해시만.

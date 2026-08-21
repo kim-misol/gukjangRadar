@@ -53,3 +53,20 @@ export function sharesFirstSyllable(a: string, b: string): boolean {
   if (a.length === 0 || b.length === 0) return false;
   return Array.from(a)[0] === Array.from(b)[0];
 }
+
+/**
+ * 자카드 유사도: |교집합| / |합집합|. docs/11-pipeline.md §2-④ 클러스터링 1차 기준.
+ * 둘 다 빈 배열이면 완전히 동일한 것으로 취급해 1을 반환한다.
+ */
+export function jaccardSimilarity<T>(a: readonly T[], b: readonly T[]): number {
+  const setA = new Set(a);
+  const setB = new Set(b);
+  if (setA.size === 0 && setB.size === 0) return 1;
+
+  let intersection = 0;
+  for (const x of setA) {
+    if (setB.has(x)) intersection++;
+  }
+  const union = setA.size + setB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}

@@ -13,6 +13,7 @@
 | 프롬프트 수정 | `spec/prompts/*.md` (설계 의도는 `08-`, `09-`) |
 | 점수 계산 로직 | `10-scoring.md` + `spec/scoring.config.json` |
 | 파이프라인/큐/배치 | `11-pipeline.md` |
+| 뉴스를 어디서 어떻게 가져오나 (W3) | `16-news-sources.md` + `spec/news_sources.seed.json` |
 | 버그가 "이상한 연결" 관련 | `12-edge-cases.md` → `13-validation.md` |
 | 다음에 뭘 만들지 | `15-build-order.md` → `14-backlog.md` |
 
@@ -34,3 +35,4 @@
 | `13-validation.md` | 13 | 오연결 방지 4중 방어 + 회귀 테스트 |
 | `14-backlog.md` | 14 | Epic → Story → Task |
 | `15-build-order.md` | 15 | 8주 MVP 순서 |
+| `16-news-sources.md` | 16 | 실시간 이슈 수집 소스 전략 (A/B/C 3층) |
