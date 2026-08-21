@@ -44,7 +44,8 @@ const envSchema = z.object({
   REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
 
   ANTHROPIC_API_KEY: z.string().optional(),
-  LLM_MODEL: z.string().default('claude-sonnet-4-5'),
+  // docs/11 §4: "요약·개체는 저비용 모델, 심사·반증만 고성능 모델" — W4(요약/개체)는 이 모델을 쓴다.
+  LLM_MODEL: z.string().default('claude-haiku-4-5'),
   LLM_DAILY_COST_CAP_USD: z.coerce.number().positive().default(20),
 
   KIS_APP_KEY: z.string().optional(),

@@ -8,7 +8,13 @@
  * (노루→노루페인트/노루홀딩스, 원희→원익 후보)에 필요한 englishName/formerNames가
  * 있는 회사는 해당 필드를 채워 둔다.
  */
-import { loadEnv, generateAliasCandidates, normalizeName, toJamo } from '@gukjang/core';
+import {
+  loadEnv,
+  generateAliasCandidates,
+  normalizeEntityName,
+  normalizeName,
+  toJamo,
+} from '@gukjang/core';
 import type { CompanyAliasInput } from '@gukjang/core';
 import newsSourcesSeed from '@gukjang/spec/news_sources.seed.json';
 import { eq } from 'drizzle-orm';
@@ -97,6 +103,8 @@ const SEED_NEWS_SOURCES = newsSourcesSeed.sources.map((s) => ({
   isActive:
     s.is_active && (s.verification.startsWith('VERIFIED') || s.verification === 'DOCUMENTED'),
 }));
+
+const SEED_ENTITY_STOPLIST = ['정부', '대통령실', '국회', '코스피', '코스닥', '증권가'];
 
 interface SeedNews {
   sourceIndex: number;
@@ -265,6 +273,14 @@ async function main(): Promise<void> {
         .insert(schema.clusterArticle)
         .values({ clusterId: cluster.id, articleId: articleRow.id })
         .onConflictDoNothing();
+    }
+
+    // 불용 개체 블랙리스트 — docs/08-prompt-entity-extraction.md §6-⑤ 그대로.
+    for (const name of SEED_ENTITY_STOPLIST) {
+      await tx
+        .insert(schema.entityStoplist)
+        .values({ nameNorm: normalizeEntityName(name), reason: '매일 등장하는 일반 기관/지수명' })
+        .onConflictDoNothing({ target: schema.entityStoplist.nameNorm });
     }
   });
 

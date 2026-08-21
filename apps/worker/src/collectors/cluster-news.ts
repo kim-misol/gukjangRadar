@@ -38,6 +38,8 @@ export interface ClusterNewsResult {
   articlesClustered: number;
   clustersCreated: number;
   clustersJoined: number;
+  /** news.analyze(⑤⑥) 트리거 대상 — 새로 생긴 클러스터만(docs/11 §1: "④ 신규 클러스터"). */
+  createdClusterIds: number[];
 }
 
 function kstTradeDate(date: Date): string {
@@ -79,6 +81,7 @@ export async function clusterNewArticles(
     articlesClustered: 0,
     clustersCreated: 0,
     clustersJoined: 0,
+    createdClusterIds: [],
   };
   if (candidates.length === 0) return result;
 
@@ -175,6 +178,7 @@ export async function clusterNewArticles(
         tokens: articleTokens,
       });
       result.clustersCreated++;
+      result.createdClusterIds.push(clusterId);
     }
 
     await db

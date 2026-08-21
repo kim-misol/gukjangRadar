@@ -172,6 +172,15 @@ CREATE TABLE entity (
 );
 CREATE INDEX entity_norm_trgm ON entity USING gin (name_norm gin_trgm_ops);
 
+-- 불용 개체 블랙리스트 — docs/08-prompt-entity-extraction.md §6-⑤: 정부, 대통령실, 국회,
+-- 코스피, 코스닥, 증권가 등 매일 나오는 것들. name_norm이 여기 있으면 news_entity로 저장하지 않는다.
+CREATE TABLE entity_stoplist (
+  id         serial PRIMARY KEY,
+  name_norm  text NOT NULL UNIQUE,
+  reason     text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE news_entity (
   cluster_id   bigint NOT NULL REFERENCES news_cluster(id) ON DELETE CASCADE,
   entity_id    bigint NOT NULL REFERENCES entity(id) ON DELETE CASCADE,

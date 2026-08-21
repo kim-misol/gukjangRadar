@@ -244,6 +244,13 @@ export const entity = pgTable(
   ],
 );
 
+export const entityStoplist = pgTable('entity_stoplist', {
+  id: serial('id').primaryKey(),
+  nameNorm: text('name_norm').notNull().unique(),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const newsEntity = pgTable(
   'news_entity',
   {
