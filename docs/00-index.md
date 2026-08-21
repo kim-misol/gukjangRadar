@@ -16,6 +16,7 @@
 | 뉴스를 어디서 어떻게 가져오나 (W3) | `16-news-sources.md` + `spec/news_sources.seed.json` |
 | 버그가 "이상한 연결" 관련 | `12-edge-cases.md` → `13-validation.md` |
 | 다음에 뭘 만들지 | `15-build-order.md` → `14-backlog.md` |
+| 배포/호스팅 작업 (W8) | `18-deployment.md` |
 
 ## 문서 목록
 | 파일 | STEP | 한 줄 |
@@ -36,3 +37,4 @@
 | `14-backlog.md` | 14 | Epic → Story → Task |
 | `15-build-order.md` | 15 | 8주 MVP 순서 |
 | `16-news-sources.md` | 16 | 실시간 이슈 수집 소스 전략 (A/B/C 3층) |
+| `18-deployment.md` | 18 | 배포 대상별 스캐폴딩 상태 + 남은 결정 |

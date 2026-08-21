@@ -58,12 +58,29 @@ const envSchema = z.object({
 
   NEXT_PUBLIC_API_BASE_URL: z.string().url().optional(),
   NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
+  // 클라이언트(브라우저)에서 PushManager.subscribe()에 쓴다 — 비밀 아님, VAPID_PUBLIC_KEY와 항상 같은 값.
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
 
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
   SESSION_COOKIE_NAME: z.string().default('gr_session'),
 
+  KAKAO_CLIENT_ID: z.string().optional(),
+  KAKAO_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().default('mailto:admin@gukjang-radar.kr'),
+
+  // T4.2 — 1인 운영 V1의 임시 인가 수단(docs/15 W8 진행 기록). role 클레임 기반 인가는
+  // 운영자가 여러 명이 될 때 app_user.role 컬럼과 함께 넣는다.
+  ADMIN_API_TOKEN: z.string().optional(),
+
+  // T5.4 — Sentry. 값이 없으면 apps/web·apps/worker 둘 다 Sentry.init을 호출하지 않는다
+  // (docs/15 W8: 계정 생성 전 스캐폴딩만). 클라이언트 번들에는 NEXT_PUBLIC_ 쪽만 들어간다.
+  SENTRY_DSN: z.string().optional(),
+  NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
 
   // R5/D1: 과금 기능 플래그. V1에서는 반드시 false.
   FEATURE_PAID_PLANS_ENABLED: boolFromString,

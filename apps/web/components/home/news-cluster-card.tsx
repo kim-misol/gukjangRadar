@@ -1,8 +1,8 @@
 import type { NewsClusterDto } from '@gukjang/spec';
-import Link from 'next/link';
 import { formatRelativeTime } from '../../lib/format/relative-time';
 import { cn } from '../../lib/utils';
 import { CompanyChip } from './company-chip';
+import { TrackedNewsLink } from './tracked-news-link';
 
 /** docs/05-screen-specs.md S1 NewsClusterListBlock 카드 + docs/17 컴포넌트 패턴(랭크/HEAT/헤드라인/칩/메타). */
 export function NewsClusterCard({ cluster, rank }: { cluster: NewsClusterDto; rank: number }) {
@@ -10,8 +10,9 @@ export function NewsClusterCard({ cluster, rank }: { cluster: NewsClusterDto; ra
   const mediaCount = new Set(cluster.sources.map((s) => s.name)).size || cluster.articleCount;
 
   return (
-    <Link
-      href={`/news/${cluster.id}`}
+    <TrackedNewsLink
+      clusterId={cluster.id}
+      source="home"
       className="flex gap-3 border-b border-rule py-4 first:pt-0 last:border-b-0"
     >
       <div className="flex w-9 shrink-0 flex-col items-center pt-1 font-mono text-ink-soft">
@@ -62,6 +63,6 @@ export function NewsClusterCard({ cluster, rank }: { cluster: NewsClusterDto; ra
           {mediaCount}개 매체 · {formatRelativeTime(new Date(cluster.firstSeenAt))}
         </p>
       </div>
-    </Link>
+    </TrackedNewsLink>
   );
 }

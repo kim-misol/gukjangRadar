@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { trackEvent } from '../../lib/analytics/track';
 
 /** docs/05-screen-specs.md S5 — "각 항목 공유 버튼 → OG 이미지 + 딥링크". */
 export function ShareButton({
+  connectionId,
   shareImageUrl,
   deepLink,
 }: {
+  connectionId: number;
   shareImageUrl: string;
   deepLink: string;
 }) {
@@ -18,6 +21,7 @@ export function ShareButton({
     try {
       await navigator.clipboard.writeText(new URL(deepLink, window.location.origin).toString());
       setCopied(true);
+      trackEvent('share', { connectionId, channel: 'clipboard' });
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // 클립보드 권한이 없으면 조용히 무시 — 공유 이미지 링크는 여전히 아래에서 열 수 있다.
@@ -30,7 +34,10 @@ export function ShareButton({
         href={shareImageUrl}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          trackEvent('share', { connectionId, channel: 'image' });
+        }}
       >
         공유 이미지
       </a>

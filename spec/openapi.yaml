@@ -16,11 +16,75 @@ tags:
   - name: stocks
   - name: discovery
   - name: search
+  - name: auth
   - name: alerts
   - name: feedback
   - name: admin
 
 paths:
+  /v1/auth/{provider}:
+    get:
+      tags: [auth]
+      summary: 소셜 로그인 시작 — provider 동의 화면으로 리다이렉트
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [kakao, google] }
+      responses:
+        '302': { description: provider 동의 화면으로 리다이렉트, CSRF state를 httpOnly 쿠키에 저장 }
+
+  /v1/auth/{provider}/callback:
+    get:
+      tags: [auth]
+      summary: OAuth 콜백 — 코드 교환 후 세션 발급 (docs/07 §5)
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [kakao, google] }
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '302': { description: 로그인 완료 — access(15분)/refresh(30일) httpOnly 쿠키 설정 후 리다이렉트 }
+        '400': { description: state 불일치(CSRF 의심) 또는 코드 교환 실패 }
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: refresh 쿠키로 access 토큰 재발급
+      responses:
+        '204': { description: 재발급 — 새 access 쿠키 설정 }
+        '401': { description: refresh 쿠키 없음/만료 }
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      responses: { '204': { description: 세션 쿠키 제거 } }
+
+  /v1/auth/me:
+    get:
+      tags: [auth]
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/AppUser' } } }
+        '401': { description: 미로그인 }
+    delete:
+      tags: [auth]
+      summary: 회원 탈퇴 — alert_keyword/push_subscription은 cascade 삭제(개인정보처리방침 §5)
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '204': { description: 탈퇴 완료 }
+        '401': { description: 미로그인 }
+
   /v1/home:
     get:
       tags: [home]
@@ -272,6 +336,22 @@ paths:
                     p256dh: { type: string }
                     auth: { type: string }
       responses: { '201': { description: 구독 등록 } }
+
+  /v1/analytics/events:
+    post:
+      summary: T5.3 분석 이벤트 스텁 싱크(실 프로바이더 미정, docs/15 W8) — sendBeacon 전송 대상
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, payload, ts]
+              properties:
+                name: { type: string, enum: [card_view, graph_open, share, feedback_submit, alert_register] }
+                payload: { type: object, additionalProperties: true }
+                ts: { type: string, format: date-time }
+      responses: { '204': { description: 수신됨(비동기 처리, 실패해도 UX에 영향 없음) } }
 
   /v1/connections/{connectionId}/feedback:
     post:
@@ -537,6 +617,16 @@ components:
         minScore: { type: integer }
         includeMeme: { type: boolean }
         isActive: { type: boolean }
+
+    AppUser:
+      type: object
+      required: [id, email, provider, plan, createdAt]
+      properties:
+        id: { type: integer }
+        email: { type: [string, 'null'] }
+        provider: { type: [string, 'null'], enum: [kakao, google, null] }
+        plan: { type: string, enum: [FREE, PRO, PRO_PLUS], description: V1은 항상 FREE(PRD D1) }
+        createdAt: { type: string, format: date-time }
 
     Home:
       type: object

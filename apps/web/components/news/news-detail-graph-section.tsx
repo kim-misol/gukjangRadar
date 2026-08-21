@@ -1,9 +1,10 @@
 'use client';
 
 import type { EntityBrief, GraphDto } from '@gukjang/spec';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ConnectionGraph } from '../graph/connection-graph';
 import { EntityChips } from './entity-chips';
+import { trackEvent } from '../../lib/analytics/track';
 
 /** docs/05-screen-specs.md S2 §3~4 — 개체 칩과 그래프가 선택 상태를 공유한다. */
 export function NewsDetailGraphSection({
@@ -14,6 +15,10 @@ export function NewsDetailGraphSection({
   graph: GraphDto;
 }) {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+
+  useEffect(() => {
+    trackEvent('graph_open', { clusterId: graph.clusterId });
+  }, [graph.clusterId]);
 
   const nodeIdByEntityLabel = useMemo(() => {
     const map = new Map<string, number>();

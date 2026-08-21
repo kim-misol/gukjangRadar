@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = { title: '고지 — 국장레이더' };
 
@@ -17,6 +18,14 @@ export default function DisclaimerPage() {
       <p className="mb-4">
         시세는 지연될 수 있으며, 화면에 항상 기준 시각을 함께 표기합니다. 뉴스 원문은
         저장·재배포하지 않고 제목과 AI 요약, 원문 링크만 제공합니다.
+      </p>
+      <p className="mt-8 flex gap-3 font-mono text-xs text-ink-soft">
+        <Link href="/legal/terms" className="underline underline-offset-2">
+          이용약관
+        </Link>
+        <Link href="/legal/privacy" className="underline underline-offset-2">
+          개인정보처리방침
+        </Link>
       </p>
     </main>
   );

@@ -16,6 +16,8 @@ export default tseslint.config(
       '**/next-env.d.ts',
       // drizzle-kit이 생성하는 마이그레이션 산출물 — 손으로 고치지 않는다.
       '**/drizzle/**',
+      // 브라우저 서비스워커 등 정적 자산 — Next.js/TS 빌드 대상이 아니다.
+      '**/public/**',
     ],
   },
   js.configs.recommended,

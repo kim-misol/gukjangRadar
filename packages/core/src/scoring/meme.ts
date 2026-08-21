@@ -38,3 +38,8 @@ export function computeMemeScore(input: MemeScoreInput, cfg: MemeConfig): number
   }
   return Math.round(score);
 }
+
+/** 억지 관련주 정의 — CLAUDE.md §6 "connection_type = MEME 이거나 meme_score ≥ 70". */
+export function isMemeConnection(type: ConnectionKind, memeScore: number): boolean {
+  return type === 'MEME' || memeScore >= 70;
+}

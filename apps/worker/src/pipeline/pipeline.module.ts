@@ -4,6 +4,7 @@ import { NewsCollectProcessor } from './news-collect.processor';
 import { NewsClusterProcessor } from './news-cluster.processor';
 import { NewsAnalyzeProcessor } from './news-analyze.processor';
 import { ConnectionBuildProcessor } from './connection-build.processor';
+import { AlertDispatchProcessor } from './alert-dispatch.processor';
 import { PipelineSchedulerService } from './pipeline-scheduler.service';
 
 @Module({
@@ -13,6 +14,7 @@ import { PipelineSchedulerService } from './pipeline-scheduler.service';
       { name: 'news.cluster' },
       { name: 'news.analyze' },
       { name: 'connection.build' },
+      { name: 'alert.dispatch' },
     ),
   ],
   providers: [
@@ -20,6 +22,7 @@ import { PipelineSchedulerService } from './pipeline-scheduler.service';
     NewsClusterProcessor,
     NewsAnalyzeProcessor,
     ConnectionBuildProcessor,
+    AlertDispatchProcessor,
     PipelineSchedulerService,
   ],
 })

@@ -52,3 +52,4 @@ export * from './kis/market-status';
 export * from './kis/volume-ratio';
 export * from './kis/map-snapshot';
 export * from './kis/holidays';
+export * from './alerts/dispatch-policy';

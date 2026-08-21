@@ -507,9 +507,237 @@ PNG 렌더까지 스크린샷 확인, 콘솔 에러 0건. `pnpm golden`을 실 `
 **17/17(100%) 통과**로 마감(실 API 누적 비용 $0.39 — 무시할 만한 수준). `golden.yml`은
 지금 상태 그대로 머지해도 통과할 것이다.
 
-## W8 — 알림 · 검수 · 출시
+## W8 — 알림 · 검수 · 출시 🔶 코드 완료, 배포·계정 연동 남음 (2026-08-21)
 E3.3 + T4.2 + E5.
 검증: 스스로 키워드 3개 걸고 하루 써본다. 알림이 성가시면 사용자에게도 성가시다.
+
+**진행 기록**: 이번 세션은 E3.3(T3.3.1~3.3.4, 로그인→키워드→웹푸시→발송)까지 완료했다.
+T4.2(관리자 검수 큐)·E5(출시 준비)는 아직 손 안 댐 — 아래 "다음 스텝" 참고.
+
+**T3.3.1 소셜 로그인 + JWT 세션**: docs/07 §5 그대로 — 카카오/구글 OAuth2 Authorization
+Code 플로우 → access(15분)/refresh(30일) JWT를 httpOnly 쿠키로 발급. `jose`를 새 의존성으로
+추가(`apps/web`) — Edge 런타임에서도 도는 라이브러리라 Route Handler와 궁합이 좋다는 이유로
+선택. 리프레시 토큰은 별도 DB 테이블 없이 `type:'refresh'` 클레임을 가진 JWT로만 구현했다 —
+스키마에 세션 테이블이 없는데 이번 주에 새로 추가할 이유가 없다고 판단(무효화가 필요해지면
+그때 테이블을 추가하면 된다).
+- `apps/web/lib/auth/jwt.ts`: access/refresh 발급·검증, 타입 혼용(refresh를 access로 검증)
+  방지. 유닛테스트 4건(정상 발급·검증, 타입 혼용 거부, 위조 토큰 거부, 쓰레기 입력에 예외
+  대신 null).
+- `apps/web/lib/auth/session.ts`: httpOnly 쿠키 발급/삭제/조회. Server Component 렌더링
+  중에는 쿠키를 `set()`할 수 없다는 Next.js 제약 때문에 Route Handler 전용으로 문서화함.
+- `apps/web/lib/auth/oauth.ts`: 카카오/구글 각각의 authorize URL 생성 + 코드 교환 + 프로필
+  조회. **KAKAO_CLIENT_ID/GOOGLE_CLIENT_ID가 이 환경엔 없어(개발자 콘솔에 앱을 등록해야
+  나오는 값) 실 OAuth 왕복은 검증 못 함** — KIS/DART 때와 같은 처지. 대신 `/api/v1/auth/
+  {provider}`가 카카오 동의 화면으로 정확한 파라미터(client_id/redirect_uri/state)로
+  리다이렉트하는 것, CSRF state 쿠키가 실제로 설정·대조되는 것(불일치 시 400)까지는 실 로컬
+  서버로 확인함.
+- `apps/web/lib/auth/state.ts`: OAuth CSRF state — 짧게 사는 httpOnly 쿠키, 콜백에서 1회
+  대조 후 즉시 삭제(재사용 방지).
+- `spec/openapi.yaml`에 `/v1/auth/{provider}`, `/v1/auth/{provider}/callback`,
+  `/v1/auth/refresh`, `/v1/auth/me`, `/v1/auth/logout` 5개 경로 + `AppUser` 스키마를 새로
+  추가함 — 이전엔 `bearerAuth` 시큐리티 스킴만 있고 실제로 그 토큰을 발급하는 엔드포인트가
+  계약에 없는 구멍이었다. `spec/types.ts`에도 `AppUserDto`/`AlertKeywordDto`/
+  `AlertKeywordInput`/`PLAN_KINDS`/`OAUTH_PROVIDERS`를 추가(둘 다 schema.sql에서 plain
+  `text` 컬럼이라 check-enum-sync 대상 아님 — 실제로 확인함).
+
+**T3.3.2 알림 키워드 CRUD (S7)**: `/alerts` — 로그인 안 했으면 카카오/구글 로그인 버튼만
+보여주고(정직한 게이트, dangling 기능 없음), 로그인 상태면 서버 컴포넌트가 `listAlertKeywords`로
+직접 DB 조회 후 `AlertsClient`(클라이언트 컴포넌트)에 넘긴다. 무료 플랜 키워드 5개 상한은
+`createAlertKeyword`가 등록 직전에 개수를 세어 강제(402), 중복 키워드는 `alert_keyword`의
+UNIQUE(user_id, keyword_norm)로 막고 409. `lib/nav.ts`의 `alerts` 항목을 `ready:true`로
+전환 — 하단 탭 4개가 이제 전부 살아있다.
+
+**T3.3.3 웹푸시 구독 + 서비스워커**: `apps/web/public/sw.js`(push/notificationclick 핸들러,
+docs/05 S7 페이로드 형식 그대로 표시) + `lib/push/subscribe-client.ts`(권한 요청 →
+서비스워커 등록 → `PushManager.subscribe` → `POST /v1/push/subscribe`). VAPID 키는
+`npx web-push generate-vapid-keys`로 이번에 로컬 검증용 실 키 쌍을 직접 생성해 `.env`에
+넣었다(더미 값이 아니라 진짜 VAPID 키). 발송 쪽(`web-push` npm 패키지)은 `apps/worker`에
+새 의존성으로 추가.
+
+**T3.3.4 발송 잡**: 판정 로직은 `packages/core/src/alerts/dispatch-policy.ts`에 순수
+함수로 뒀다(R7) — `matchesAlertKeyword`(키워드가 클러스터 제목/개체에 포함되는가),
+`isQuietHoursKst`(KST 22:00~07:00, 서버 타임존과 무관하게 UTC 인스턴트를 직접 환산),
+`decideAlertDispatch`(연결강도·밈포함여부·일일상한·무음시간대를 순서대로 검사). 유닛테스트
+11건. 무음 시간대/일일 상한은 "거부"가 아니라 "보류"로 설계함 — `alert_delivery` insert를
+하지 않으므로 다음 배치에서 조건이 바뀌면(예: 무음 시간대 종료) 같은 클러스터가 다시
+후보로 올라온다(docs/11 §3 멱등성 원칙과 동일한 사고방식).
+- DB 조회·실제 발송(IO)은 `apps/worker/src/alerts/dispatch-alerts.ts`가 담당 — 클러스터의
+  활성 연결과 활성 키워드 전체를 조회해 매칭 판정을 돌리고, 통과한 키워드마다 가장 점수가
+  높은 연결 하나로 `alert_delivery`(UNIQUE(alert_id, cluster_id))를 먼저 insert해서
+  동시성/재실행에도 중복 발송이 안 되게 한 뒤에만 실제 push를 보낸다. push가 404/410(Gone)로
+  실패하면 그 자리에서 `push_subscription`을 정리한다.
+- `apps/worker/src/pipeline/alert-dispatch.processor.ts`: 새 BullMQ 큐 `alert.dispatch`
+  (동시성 2, docs/11 §1). `connection-build.processor.ts`가 연결을 1건 이상 저장하면 이
+  큐에 바로 잡을 넣는다(⑫ 완료 트리거, `news-analyze.processor.ts`가 `connection.build`를
+  잡는 방식과 동일한 패턴).
+- `apps/web/lib/format/tone.ts`의 `isMemeConnection`을 `packages/core/src/scoring/meme.ts`로
+  옮기고 web 쪽은 재수출만 하도록 정리 — 워커도 똑같은 밈 판정 규칙(CLAUDE.md §6)이
+  필요해졌는데, 두 곳에 같은 한 줄 로직을 복사해 두면 나중에 하나만 고치고 잊어버리는 사고가
+  날 게 뻔해서 R7 원칙대로 `packages/core`로 합쳤다.
+- **실 검증**: `scripts/manual-verify-w8-alerts.ts`(커밋에 남김, manual-verify-*.ts와 동일
+  성격) — `pnpm --filter @gukjang/web dev` + 실 로컬 postgres 대상으로, 세션 쿠키를 직접
+  서명해 만든 뒤(OAuth 왕복은 여전히 막혀 있으니) `/v1/alerts` CRUD·`/v1/push/subscribe`를
+  실 API로 확인하고, "삼성전자" 키워드 + 실제로 시드돼 있던 "삼성전자..." 헤드라인 클러스터로
+  `dispatchAlertsForCluster`를 직접 돌려 **매칭 → 발송 → 페이로드
+  `"삼성전자" 뉴스 발생 · 연결 발견: 삼성전자 (DIRECT 46)`(docs/05 S7 예시 포맷과 동일 구조)
+  → 가짜 구독이 410을 반환하자 그 자리에서 `push_subscription` 정리 → 같은 클러스터로
+  재실행하면 `alert_delivery` UNIQUE 덕에 중복 발송 안 됨**까지 전부 실제로 재현해서
+  확인했다. 실 브라우저 푸시 수신(진짜 서비스워커가 알림을 띄우는 것)과 실 OAuth 왕복만
+  이 환경의 한계로 못 봤다 — 나머지 전체 파이프라인은 실 DB로 끝까지 확인함.
+
+**미룬 것**:
+- `apps/web/app/api/v1/discovery/requests`의 IP/계정 레이트리밋(docs/07 §4)은 W6에서
+  "W8 인증 붙을 때 같이 넣는다"고 미뤄뒀던 항목인데, 이번에도 손대지 않았다 — 전역
+  레이트리밋 미들웨어(Redis 기반)는 알림 발송 루프와 별개 작업이라 범위를 넘어간다고
+  판단, 다음 스텝 후보로 다시 남김.
+- PWA 아이콘(`/icons/icon-192.png`)이 아직 없어 `sw.js`의 알림 아이콘 참조가 깨진 상태다
+  (브라우저는 조용히 기본 아이콘으로 대체하므로 기능은 살아있음) — T5.2에서 매니페스트와
+  같이 만들 것.
+- 카카오/구글 앱을 개발자 콘솔에 등록해 실 CLIENT_ID/SECRET을 받는 일은 이 환경에서 할 수
+  없는 사용자 쪽 작업이다 — `.env.example`에 자리는 만들어 뒀다.
+
+**⚠️ W7에서 남겨뒀던 KIS 라이브 검증 후기록**: 지난 세션에 실 `KIS_APP_KEY`로 시세
+조회(`005930`)를 딱 1회 성공시켰었는데(`rt_cd:"0"`, 정상 응답) 그 결과를 이 문서에
+못 남기고 넘어갔었다. 재시도는 KIS 토큰 발급 레이트리밋(HTTP 403)에 바로 걸려 필드
+단위까지 반복 확인은 못 했지만, **KIS 연동이 실제로 살아있다는 것 자체는 그 1회 성공으로
+이미 확인된 사실**이라 여기 정정해서 남긴다(W7 섹션의 "KIS_APP_KEY/SECRET이 이 환경엔
+없어 라이브 검증은 못 했지만"이라는 서술은 그 뒤에 실제로 키가 생겨 부분적으로 낡았다).
+
+**T4.2 관리자 검수 큐 UI**: `/admin/review` — docs/03-ia.md 공개 라우트 표에는 없는 내부
+전용 화면이라 마스트헤드/하단 네비게이션 대상 IA에는 안 넣었다(URL을 직접 아는 운영자만
+접근). 다만 `app/layout.tsx`가 전역이라 마스트헤드/하단 네비/고지 푸터가 이 화면에도 그대로
+붙는다 — 소비자 화면용 chrome을 빼려면 라우트 그룹 리팩터(기존 6개 화면을 전부
+`app/(consumer)/`로 옮기는 작업)가 필요해 이번 주 범위에서는 미용상 문제로만 남기고
+손대지 않았다.
+- **인가 방식(중요한 단순화)**: docs/07 §5는 "관리자 API는 별도 role 클레임 + IP
+  허용목록"이라고 정의하지만, `app_user`에 role 컬럼이 없고(스키마에 없음) 이 프로덕트는
+  "1인 개발"(docs/15 헤더)이 전제라 실제 다중 운영자 RBAC을 지금 새로 설계하는 건 시기상조라고
+  판단했다. 대신 공유 시크릿 헤더(`X-Admin-Token` == `ADMIN_API_TOKEN`)로 V1을 통과시키고,
+  이 결정과 이유를 `lib/auth/admin-guard.ts` 주석에 그대로 남겼다 — 운영자가 여러 명이 되면
+  그때 `app_user.role` 컬럼 + JWT role 클레임으로 교체할 것.
+- `lib/api/admin.ts`: `listReviewQueue`(status=PENDING인 것만, 또는 `onlyFlagged=false`로
+  상태 무관 최근 50건 — "출시 후 첫 4주" 절의 "매일 아침 연결 30건 육안 검수"에 쓸 수 있게)
+  + `submitConnectionReview`(APPROVE→ACTIVE/REJECT→REJECTED/CORRECT→CORRECTED,
+  `connection_review`에 감사로그 남김).
+- **알려진 단순화**: docs/10 §8 "미검수 연결은 connection_score 상한 95" 해제(재계산)는
+  구현하지 않았다 — `computeConnectionScore`가 필요로 하는 `hasEvidenceGap`/`ambiguousAlias`
+  플래그가 `connection` 테이블에 저장돼 있지 않아서, 저장 안 된 값을 사후 추정해 재계산하면
+  틀린 점수를 만들 위험이 실제 이득(95→100 사이 몇 점)보다 크다고 판단했다. CORRECT 액션의
+  patch 범위도 `explanation`/`businessRelevance` 두 필드로만 한정했다(연결을 다른 회사로
+  옮기는 것은 범위 밖 — 그 정도로 틀렸으면 REJECT가 맞는 액션).
+- **실 검증**: 실 로컬 postgres + 실행 중인 서버로 토큰 없음(401)/틀린 토큰(401)/정상
+  토큰(200) 전부 확인. 실 PENDING 연결(id=144, 삼성바이오로직스 NAME_MATCH) 하나를 실제로
+  APPROVE(→ACTIVE, `connection_review`에 감사로그 생성 확인)했다가 CORRECT(explanation 교체,
+  →CORRECTED)까지 순서대로 돌려 두 액션 다 실제로 동작하는 것을 확인한 뒤, 검증 흔적을
+  지우려고 `connection_review` 테스트 행을 지우고 status를 PENDING으로 되돌렸다 — **다만
+  CORRECT 테스트에서 덮어쓴 explanation 원문은 미리 저장해두지 않아 복구하지 못했다**(정직하게
+  남김: 로컬 시드 데이터 한 행의 설명문이 검증용 텍스트로 남아있음, 프로덕션/커밋 대상
+  아니므로 실질적 영향은 없음). `/admin/review` 페이지 렌더·토큰 프롬프트도 curl로 HTML
+  확인함. `next build` 29개 라우트로 재확인.
+
+**다음 스텝**: E5(고지/약관/개인정보처리방침, PWA 매니페스트+아이콘, 분석 이벤트, Sentry,
+배포, 자본시장법 체크리스트).
+
+**검증**: `make ci` 전체(format-check/lint/typecheck/test 378건(core 291+web 47+worker 40)/check-enum-sync/
+lint-forbidden-words) 클린 통과, `next build` 프로덕션 빌드 성공(29개 라우트 — 알림 CRUD
+5개+OAuth 4개+push 1개+관리자 검수 3개 라우트 추가). E3.3 게이트("키워드 등록 → 매칭 뉴스
+발생 → 실제 푸시 도착")는 실 브라우저 알림 수신 직전까지("발송 결정 → alert_delivery 저장 →
+sendPush 호출") 실 DB·실 서버로 확인했고, 마지막 한 칸(진짜 브라우저가 알림을 띄우는 것)만
+이 환경(헤드리스, 실 브라우저 없음)의 한계로 못 봤다 — 정직하게 🔶로 남긴다. T4.2는 승인/
+정정 두 액션 모두 실 DB에서 상태 전이까지 확인해 완료로 본다.
+
+**E5 진행 기록** (사용자 확인: 커밋은 E5까지 마저 끝낸 뒤 한 번에 / 법적 문서는 초안만 /
+T5.5는 설정 파일 스캐폴딩만).
+
+**T5.1 고지·이용약관·개인정보처리방침**: `/legal/terms`, `/legal/privacy` 신설(기존
+`/legal/disclaimer`에 상호 링크 추가). 둘 다 상단에 "초안입니다, 변호사 검토 전"이라고
+명시(docs/01 §7 원문 톤 그대로). 개인정보처리방침이 "계정 삭제 요청 가능"을 약속하길래
+실제로 뒷받침되는 기능인지 확인했더니 없었다 — `DELETE /v1/auth/me`(회원 탈퇴, cascade로
+alert_keyword/push_subscription까지 삭제)를 새로 만들고 `/alerts` 화면에 로그아웃/탈퇴
+버튼을 붙여 문서가 약속하는 기능을 실제로 채웠다(실 DB로 탈퇴→cascade 확인함).
+**작성 중 금지어 린터(R5/D4)가 실제로 작동하는 것을 목격**했다 — 이용약관 초안에 "투자
+추천·투자자문·투자권유가 아니며, 매수·매도를 권유하지 않습니다"라고 쓴 게 "추천"/"매수"/
+"매도"에 걸려 `make ci`가 막혔다. `SAFE_PHRASES`(정확히 D3 문구만 예외)에 새로 추가하는
+대신, D3 원문 문장을 그대로 재사용하고 나머지는 그 단어들 자체를 안 쓰는 표현으로 바꿔
+썼다("특정 종목에 대한 거래를 지시하지 않습니다") — 가드레일을 넓히기보다 카피를 가드레일에
+맞춘 것.
+
+**T5.2 PWA**: `app/manifest.ts`(Next.js 특수 파일, `/manifest.webmanifest` 자동 서빙),
+`app/apple-icon.tsx`(180×180), `app/icons/192`·`app/icons/512`(Route Handler) 전부
+`next/og`의 `ImageResponse`로 렌더 — 별도 아이콘 파일을 그리는 대신 이미 검증된 OG 이미지
+렌더 경로(`fetchKoreanFont` 포함)를 재사용했다. 실제 PNG로 렌더해 192×192/180×180 크기가
+맞는 것, manifest JSON이 유효한 것까지 확인(아이콘 이미지 직접 확인 — 종이 배경에 "국" 글자).
+iOS 홈화면 안내는 `/alerts`의 웹푸시 섹션에 `navigator.standalone` 체크로 조건부 표시(Safari
+공유 → 홈 화면에 추가 3단계 안내). `sw.js`가 참조하던 존재하지 않는 아이콘 경로도 이번에
+같이 고쳐졌다.
+
+**T5.3 분석 이벤트 설계**: 실 분석 프로바이더(PostHog/GA4 등)는 아직 미정이라 이벤트
+taxonomy(`card_view`/`graph_open`/`share`/`feedback_submit`/`alert_register`, docs/14
+EPIC5 문구 그대로)와 발생 지점만 확정해 실제 UI에 배선했다 — 전송은 `sendBeacon`으로 자체
+스텁 싱크(`POST /v1/analytics/events`, 구조화 로그만 남김)에 보내고, 프로바이더가 정해지면
+`lib/analytics/track.ts` 내부만 바꾸면 되게 분리했다. `card_view`는 홈 뉴스 카드 클릭에만
+배선했다(발견/검색 등 다른 카드 종류는 같은 패턴을 나중에 따라 붙이면 된다 — 범위를
+일부러 좁힘). **작업 중 실제로 next build를 한 번 깨뜨렸다**: 카드 클릭 추적을 달려고
+`NewsClusterCard`(서버 컴포넌트)를 통째로 `'use client'`로 바꿨더니, 그 컴포넌트가
+`CompanyChip`→`tone.ts`를 거쳐 `@gukjang/core` 배럴 전체(그 안의 `env.ts`가 쓰는
+`node:fs`/`node:path`, `input-hash.ts`가 쓰는 `node:crypto`)를 브라우저 번들로 끌고 들어가
+`next build`가 `UnhandledSchemeError`로 실패했다. 카드 전체를 클라이언트로 바꾸는 대신
+`Link`+추적만 하는 얇은 클라이언트 래퍼(`TrackedNewsLink`)로 분리해 고쳤다 — RSC에서
+"서버 컴포넌트 children을 감싸는 얇은 클라이언트 컴포넌트" 패턴. 이 삽질 자체가 이번 주의
+좋은 교훈이다: 클릭 핸들러 하나 때문에 이미 무거운 서버 컴포넌트를 통째로 client로 바꾸지
+말 것.
+
+**T5.4 에러 추적(Sentry) 스캐폴딩**: 계정을 만들지 않은 상태라 `SENTRY_DSN`이 비어 있으면
+`Sentry.init()`을 아예 호출하지 않게 했다(코드는 있지만 완전히 비활성). Next.js 15 App
+Router의 최신 관례(`instrumentation.ts`+`instrumentation-client.ts`+
+`sentry.server.config.ts`+`sentry.edge.config.ts`, 예전 `sentry.client.config.ts`
+방식이 아님)를 학습 시점 지식으로 바로 안 쓰고 Sentry 공식 문서를 다시 확인한 뒤 그대로
+따라 썼다 — 이 종류의 SDK 관례는 자주 바뀌어서(claude-api 스킬이 Claude API 자체에 대해
+경고하는 것과 같은 종류의 "API drift") 그냥 기억에 의존하면 안 된다고 판단했다.
+`next.config.ts`는 `SENTRY_ORG`/`SENTRY_PROJECT`가 없으면 `withSentryConfig`로 감싸지
+않는다(감싸면 빌드 시 소스맵을 업로드하려다 인증 없이 실패할 수 있어서) — 실제로 이 상태로
+`next build`가 여전히 성공하는 것까지 확인함(다만 클라이언트 번들에 Sentry SDK 자체는
+포함돼 First Load JS가 102kB→183kB로 커졌다 — DSN이 생기면 바로 켜지도록 하는 대가로
+감수한 트레이드오프, 나중에 dynamic import로 줄이는 것도 가능). `apps/worker`는
+`@sentry/node`로 `main.ts` 최상단에서 `initSentry()`(DSN 없으면 no-op) + bootstrap 실패시
+`Sentry.captureException` 배선. 잡 단위(BullMQ 'failed' 이벤트) 캡처는 API를 확인 안 하고
+추측으로 배선하고 싶지 않아 이번엔 안 했다 — 다음 스텝 후보.
+
+**T5.5 배포 설정 파일 스캐폴딩**: 루트 `vercel.json`(pnpm 모노레포용 buildCommand/
+installCommand/outputDirectory), `apps/worker/Dockerfile`+`.dockerignore`. **Dockerfile을
+쓰다가 이 모노레포의 실제 프로덕션 실행 경로가 깨져 있는 것을 발견해 같이 고쳤다**:
+`apps/worker/package.json`의 `"start": "node dist/main.js"`가 한 번도 실제로 검증된 적
+없었다는 걸 알아채고 직접 돌려봤더니 `ERR_MODULE_NOT_FOUND`로 즉시 깨졌다 — 이 리포는
+`packages/core`/`packages/db`/`spec`의 `package.json` `exports`가 컴파일된 `dist`가 아니라
+**소스(.ts)를 직접** 가리키는 설계라(항상 번들러/tsx로 돌리는 전제), `tsc`로 컴파일한
+`dist/main.js`를 plain `node`로 실행하면 상대경로 확장자 문제 이전에 애초에
+`@gukjang/core`부터 못 읽는다. `start` 스크립트를 `tsx src/main.ts`로 바꿔(`tsx`를
+dependencies로 이동) `dev`와 동일한 경로로 프로덕션도 돌게 고쳤다 — 실제로
+`pnpm --filter @gukjang/worker start` + `/health` 200으로 확인함. `apps/web:build`도 재확인
+(34개 라우트, `next build` 성공). Docker 이미지 자체는 **이 개발 환경에 Docker가 없어 빌드
+검증은 못 했다** — Dockerfile 로직은 신중히 검토했지만 정직하게 미검증으로 남긴다.
+새 `docs/18-deployment.md`에 구성요소별 배포 대상·필요 환경변수·남은 결정(호스팅 선택,
+계정 생성)을 정리했다.
+
+**T5.6 자본시장법 검토 체크리스트**: docs/01 §7 D1~D5 + §9 안티골을 실제 코드/스키마
+대조해 확인했다.
+| 결정 | 확인 방법 | 결과 |
+|---|---|---|
+| D1 무료 V1, 과금 flag off | `FEATURE_PAID_PLANS_ENABLED` 기본값 확인 | ✅ false |
+| D2 제보 1:1 응답 금지 | `lib/api/discovery.ts` 구현 확인 | ✅ 공개 큐만, 응답 없음 |
+| D3 고지 문구 전 화면 | `app/layout.tsx`가 전역 렌더하는지 확인 | ✅ 관리자 화면 포함 전부 |
+| D4 금지어 CI 린터 | `make ci` 게이트에 포함되는지 확인 | ✅ (이번 세션에 실제로 걸리는 것도 목격) |
+| D5 본문 미저장, 이미지 핫링크 금지 | `spec/schema.sql` news_article 컬럼 + `<img>` 사용처 검색 | ✅ `lead`만(비노출), `<img>` 사용 0건 |
+| §9 안티골(매매/백테스트/토론방/"TOP5") | 코드베이스 전체 검색 | ✅ 해당 기능 존재하지 않음 |
+이 체크는 **변호사 검토를 대체하지 않는다**(docs/01 §7 원문 그대로) — 실 유료화·알림 상용화
+전 전문 검토가 여전히 필요하다.
+
+**검증(E5 전체)**: `make ci` 클린 통과(format-check/lint/typecheck/test 380건(core 291+
+web 49+worker 40)/check-enum-sync/lint-forbidden-words), `next build` 프로덕션 빌드 성공
+(34개 라우트 — 법적 문서 3개+manifest+apple-icon+아이콘 2개+분석 이벤트 1개 추가),
+`pnpm --filter @gukjang/worker start`로 워커 실제 기동 확인(`/health` 200, 이번에 고친
+경로). Docker 빌드 자체와 실 Sentry/Kakao/Google 계정 연동은 이 환경의 한계로 미검증 —
+정직하게 남긴다.
 
 ---
 ## 주차별 게이트 (통과 못 하면 다음 주로 넘어가지 않는다)
@@ -521,7 +749,9 @@ E3.3 + T4.2 + E5.
 | W5 | 골든셋 통과율 ≥ 90%, 오탐 함정 0 |
 | W6 | 실기기에서 그래프가 부드럽다 — 🔶 데스크톱/Playwright로 팬·줌·탭 확인, 실 모바일 기기 검증은 남음 |
 | W7 | 종목 상세 역방향에서 "연결 미발견"이 정직하게 뜬다 — ✅ 확인(005930). 골든셋은 실 API 키로 라이브 버그 2건(strict tool schema, temperature) + 프롬프트 튜닝까지 마쳐 최종 17/17(100%) |
-| W8 | 하루 종일 무인 운영으로 파이프라인이 돈다 |
+| W8 | 하루 종일 무인 운영으로 파이프라인이 돈다 — 🔶 코드·로직은 실 DB로 검증(알림 매칭→발송
+결정→push 호출, 관리자 승인/정정). 실제 "하루 종일 무인 운영"은 실 배포(T5.5 남은 결정) +
+실 Kakao/Google/Sentry 계정 연동 이후에만 확인 가능 |
 
 ## 출시 후 첫 4주
 | 주 | 할 일 |

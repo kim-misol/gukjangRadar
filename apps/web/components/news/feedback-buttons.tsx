@@ -3,6 +3,7 @@
 import type { FeedbackKind } from '@gukjang/spec';
 import { useEffect, useState } from 'react';
 import { getOrCreateAnonId } from '../../lib/anon-id';
+import { trackEvent } from '../../lib/analytics/track';
 import { cn } from '../../lib/utils';
 
 type Status = 'idle' | 'submitting' | 'submitted' | 'error';
@@ -37,6 +38,7 @@ export function FeedbackButtons({ connectionId }: { connectionId: number }) {
         localStorage.setItem(storageKey(connectionId), kind);
         setChosen(kind);
         setStatus('submitted');
+        if (res.status === 204) trackEvent('feedback_submit', { connectionId, kind });
       } else {
         setStatus('error');
       }

@@ -44,6 +44,7 @@ export function MemeRankBlock({
             {showShare && (
               <div className="mt-1">
                 <ShareButton
+                  connectionId={item.connection.id}
                   shareImageUrl={item.shareImageUrl}
                   deepLink={`/news/${item.connection.clusterId}`}
                 />

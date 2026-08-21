@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+**/.turbo
+**/dist
+**/.next
+.git
+apps/web
+docs
+.claude

@@ -305,6 +305,37 @@ export interface Candidate {
   pathEdgeWeights: number[];
 }
 
+// ─────────────────────────────────────────────
+// 인증 / 알림
+// ─────────────────────────────────────────────
+export const PLAN_KINDS = ['FREE', 'PRO', 'PRO_PLUS'] as const;
+export type PlanKind = (typeof PLAN_KINDS)[number];
+
+export const OAUTH_PROVIDERS = ['kakao', 'google'] as const;
+export type OAuthProvider = (typeof OAUTH_PROVIDERS)[number];
+
+export interface AppUserDto {
+  id: number;
+  email: string | null;
+  provider: string | null;
+  plan: PlanKind;
+  createdAt: string;
+}
+
+export interface AlertKeywordDto {
+  id: number;
+  keyword: string;
+  minScore: Score100;
+  includeMeme: boolean;
+  isActive: boolean;
+}
+
+export interface AlertKeywordInput {
+  keyword: string;
+  minScore?: Score100;
+  includeMeme?: boolean;
+}
+
 /** LLM 이 반환해야 하는 구조 (tool_use JSON schema 로 강제) */
 export interface LlmJudgement {
   companyId: number;

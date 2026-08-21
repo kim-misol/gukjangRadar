@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import scoringConfig from '@gukjang/spec/scoring.config.json';
 import type { MemeConfig } from './types';
-import { computeMemeScore } from './meme';
+import { computeMemeScore, isMemeConnection } from './meme';
 
 const cfg = scoringConfig.meme as MemeConfig;
 
@@ -29,6 +29,17 @@ describe('computeMemeScore', () => {
       cfg,
     );
     expect(score).toBe(0);
+  });
+});
+
+describe('isMemeConnection', () => {
+  it('connection_type이 MEME이면 밈이다', () => {
+    expect(isMemeConnection('MEME', 10)).toBe(true);
+  });
+
+  it('meme_score가 70 이상이면 타입과 무관하게 밈이다 (CLAUDE.md 용어 표)', () => {
+    expect(isMemeConnection('DIRECT', 70)).toBe(true);
+    expect(isMemeConnection('DIRECT', 69)).toBe(false);
   });
 
   it('시세가 없으면(null) 남은 두 가중치로 재정규화한다 — 0으로 넣지 않는다', () => {
