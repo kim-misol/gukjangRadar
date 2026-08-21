@@ -1,4 +1,4 @@
-<!-- version: ee-v1 | stage: ENTITY | model: claude · temperature 0 -->
+<!-- version: ee-v1 | stage: ENTITY | model: claude -->
 
 ## SYSTEM
 
@@ -38,7 +38,7 @@
     "properties": {
       "entities": {
         "type": "array",
-        "maxItems": 20,
+        "description": "최대 20개 — strict tool use는 maxItems를 지원하지 않아(W7 라이브 검증에서 발견) 프롬프트 지시 + 사후 zod 검증으로 강제한다",
         "items": {
           "type": "object",
           "required": ["surface", "normalized", "kind", "importance", "in_headline", "role"],
@@ -47,7 +47,7 @@
             "normalized":  { "type": "string", "description": "공백·조사 제거한 기본형" },
             "kind":        { "type": "string", "enum": ["PERSON","ORG","PLACE","PRODUCT","EVENT","BRAND","WORD","TIME","NUMBER","OTHER"] },
             "subtype":     { "type": "string" },
-            "importance":  { "type": "number", "minimum": 0, "maximum": 1 },
+            "importance":  { "type": "number", "description": "0~1 — strict tool use는 minimum/maximum을 지원하지 않아 사후 zod 검증으로 강제한다" },
             "in_headline": { "type": "boolean" },
             "role":        { "type": "string", "enum": ["SUBJECT","OBJECT","CONTEXT"] },
             "aliases":     { "type": "array", "items": { "type": "string" } },

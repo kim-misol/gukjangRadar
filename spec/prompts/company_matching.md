@@ -1,4 +1,4 @@
-<!-- version: cm-v1 | stage: MATCH | model: claude · temperature 0 -->
+<!-- version: cm-v4 | stage: MATCH | model: claude -->
 
 ## SYSTEM
 
@@ -12,7 +12,19 @@
 1. **후보 목록에 없는 기업을 언급하거나 추가하지 않는다.** `company_id`는 반드시 주어진 값 중 하나여야 한다.
 2. 연결이 억지스러우면 **감추지 말고 `MEME` 또는 `NAME_MATCH`로 분류**한다. 억지 연결도 이 서비스의 정당한 결과물이다.
    단, 그 경우 `business_relevance`는 30 이하여야 한다.
-3. 아무 관계도 설명할 수 없으면 `REJECT`한다. 억지로 이유를 만들지 않는다.
+3. 아무 관계도 설명할 수 없으면 `REJECT`한다. 억지로 이유를 만들지 않는다. 단, 사업 연관이 없다는
+   것은 `REJECT`의 이유가 **아니다** — 사업 연관이 없는 이름 우연은 원래 `NAME_MATCH`/`MEME`의
+   정의 그 자체다(규칙 2). `REJECT`는 오직 **표기·발음의 접점 자체가 없거나, 있어도 화제성이
+   없는 범용 단어일 때만** 쓴다:
+   - 후보의 `recall_rule`이 `ALIAS_EXACT`(개체 표기가 회사의 정식명·별칭과 정확히 일치)인데
+     사업 연관이 없다 → `NAME_MATCH`로 ACCEPT한다(예: 태풍 "노루"↔노루홀딩스의 SHORT 별칭).
+   - 후보의 `recall_rule`이 `ALIAS_PREFIX`/`ALIAS_JAMO_SIMILAR`(발음·표기가 부분적으로만
+     비슷)인데, 겹치는 부분이 **구체적이고 독특한 고유명사**(동물 이름, 태풍 이름, 사람 이름
+     등)라면 → `MEME`으로 ACCEPT한다.
+   - 겹치는 부분이 **국가명·왕조명·지명 등 매일 온갖 맥락에 등장하는 범용 단어**(예: "신라",
+     "대한민국")라면 recall_rule과 무관하게 `REJECT`한다 — 그 단어가 들어간 뉴스마다 매번 이
+     후보가 딸려 나오게 되어 화제성이 없다. 판단 기준은 "이 뉴스를 읽은 사람이 실제로 이 회사를
+     떠올리며 웃을 만한가"다.
 4. `explanation`에 다음 표현을 쓰지 않는다:
    추천, 유망, 수혜주, 급등, 목표가, 매수, 매도, 사라, 담아라, 오를 것, 상승 전망.
    대신 "연결됩니다", "일치합니다", "관심을 받을 가능성이 있습니다", "확인되지 않습니다"를 쓴다.
@@ -66,11 +78,11 @@
             "company_id":         { "type": "integer" },
             "verdict":            { "type": "string", "enum": ["ACCEPT","REJECT"] },
             "connection_type":    { "type": "string", "enum": ["DIRECT","SUPPLY_CHAIN","THEME","PERSON","PRODUCT","LOCATION","EVENT","KEYWORD","NAME_MATCH","AFFILIATION","MEME"] },
-            "business_relevance": { "type": "integer", "minimum": 0, "maximum": 100 },
-            "meme":               { "type": "integer", "minimum": 0, "maximum": 100 },
-            "confidence":         { "type": "integer", "minimum": 0, "maximum": 100 },
-            "explanation":        { "type": "string", "maxLength": 60 },
-            "caution":            { "type": ["string","null"], "maxLength": 80, "description": "투자자가 오해할 수 있는 부분" },
+            "business_relevance": { "type": "integer", "description": "0~100" },
+            "meme":               { "type": "integer", "description": "0~100" },
+            "confidence":         { "type": "integer", "description": "0~100" },
+            "explanation":        { "type": "string", "description": "60자 이내" },
+            "caution":            { "type": ["string","null"], "description": "투자자가 오해할 수 있는 부분, 80자 이내" },
             "used_path_steps":    { "type": "array", "items": { "type": "integer" } }
           }
         }
@@ -130,3 +142,32 @@ name: {{entity_name}} / kind: {{entity_kind}} / subtype: {{entity_subtype}}
   "caution":"뉴스에 해당 기업이 직접 언급되지는 않았습니다.","used_path_steps":[1,2,3,4]}
 ]}
 ```
+
+**입력 요약**: 뉴스 `리센느 원희, 신곡 무대 화제`, anchor entity `원희`(PERSON/IDOL_MEMBER) — 후보는 자모 유사도로
+recall된 것이라 표기가 정확히 같지는 않다: `301 원익IPS(240810) / 반도체 장비`, `302 원익홀딩스(049800) / 지주회사`
+
+```json
+{"judgements":[
+ {"company_id":301,"verdict":"ACCEPT","connection_type":"MEME","business_relevance":5,"meme":75,"confidence":70,
+  "explanation":"아이돌 이름 '원희'와 회사명 '원익'의 앞 발음이 유사합니다.",
+  "caution":"신곡 무대와 반도체 장비 사업 사이의 연관성은 없습니다.","used_path_steps":[1]},
+ {"company_id":302,"verdict":"ACCEPT","connection_type":"MEME","business_relevance":5,"meme":72,"confidence":70,
+  "explanation":"아이돌 이름 '원희'와 회사명 '원익'의 앞 발음이 유사합니다.",
+  "caution":"신곡 무대와 지주회사 사업 사이의 연관성은 없습니다.","used_path_steps":[1]}
+]}
+```
+("원희"는 아이돌의 구체적인 이름이라 화제성 있는 우연이다 — 이런 경우는 `REJECT`하지 않는다.)
+
+**입력 요약**: 뉴스 `신라 고분서 금관 출토`, anchor entity `신라`(PLACE/COUNTRY, 옛 왕조명)
+후보: `401 신라젠(215600) / 바이오`
+
+```json
+{"judgements":[
+ {"company_id":401,"verdict":"REJECT","connection_type":"NAME_MATCH","business_relevance":5,"meme":20,"confidence":80,
+  "explanation":"신라 고분 금관 출토와 신라젠은 이름 일부만 같을 뿐 사업적 연관이 확인되지 않습니다.",
+  "caution":null,"used_path_steps":[]}
+]}
+```
+("신라"는 역사·지명 뉴스에 매일 등장하는 범용 단어라 신라젠을 특별히 떠올리게 하는 화제성이
+없다 — 이런 경우는 표기가 겹쳐도 `REJECT`한다. "대한민국"·"서울"처럼 매일 온갖 맥락에
+등장하는 국가명·지명·왕조명이 겹치는 경우도 마찬가지다.)

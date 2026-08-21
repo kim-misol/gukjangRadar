@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status *)",
+      "Bash(xargs -0 -I{} echo {})",
+      "Bash(git rm *)",
+      "Bash(rm .git/index.lock)"
+    ]
+  }
+}

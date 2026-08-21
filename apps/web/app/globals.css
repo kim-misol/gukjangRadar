@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* docs/17-screen-design-guide.md §디자인 토큰 — "종이신문" 컨셉 값 그대로. */
+:root {
+  --color-paper: oklch(0.965 0.006 80);
+  --color-ink: oklch(0.2 0.006 80);
+  --color-ink-soft: oklch(0.42 0.006 80);
+  --color-up: oklch(0.5 0.19 25); /* 상승 = 빨강 (국내 증시 관행) */
+  --color-down: oklch(0.42 0.12 250); /* 하락 = 파랑 */
+  --color-rule: oklch(0.78 0.006 80);
+  --color-rule-strong: oklch(0.16 0.006 80);
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
+
+@layer utilities {
+  /*
+   * 리드 문단 드롭캡 — docs/17 §디자인 토큰 값(3.4em/900)은 라틴 문자 기준이라
+   * 실 브라우저 검증(W6) 결과 한글 완성형 글자 1개에 그대로 적용하면 획이 뭉개진
+   * 검은 사각형처럼 보였다. 한글에 맞게 크기/굵기를 낮췄다 — docs/15 W6 기록 참고.
+   */
+  .lead-para:first-letter {
+    font-family: var(--font-noto-serif-kr), serif;
+    font-size: 2.6em;
+    font-weight: 700;
+    line-height: 0.85;
+    float: left;
+    padding-right: 0.1em;
+    padding-top: 0.02em;
+  }
+}

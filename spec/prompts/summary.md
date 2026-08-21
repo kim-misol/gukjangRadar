@@ -1,4 +1,4 @@
-<!-- version: sum-v1 | stage: SUMMARY | model: claude · temperature 0 -->
+<!-- version: sum-v1 | stage: SUMMARY | model: claude -->
 
 ## SYSTEM
 
@@ -30,10 +30,8 @@
     "properties": {
       "sentences": {
         "type": "array",
-        "minItems": 3,
-        "maxItems": 3,
         "items": { "type": "string" },
-        "description": "정확히 3개의 문장"
+        "description": "정확히 3개의 문장 — strict tool use는 minItems/maxItems를 지원하지 않아(W7 라이브 검증에서 발견) 개수는 프롬프트 지시 + 사후 zod 검증으로 강제한다"
       }
     }
   }

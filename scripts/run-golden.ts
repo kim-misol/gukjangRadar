@@ -14,7 +14,13 @@ import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { closeDb, getDb, schema } from '@gukjang/db';
 import { and, eq } from 'drizzle-orm';
-import { loadEnv, parseGoldenSet, evaluateGoldenCase, type GoldenCase } from '@gukjang/core';
+import {
+  loadEnv,
+  normalizeName,
+  parseGoldenSet,
+  evaluateGoldenCase,
+  type GoldenCase,
+} from '@gukjang/core';
 import scoringConfig from '@gukjang/spec/scoring.config.json';
 import type {
   KeywordMatchConfig,
@@ -79,7 +85,11 @@ async function setupFixtureCluster(
     .values({ clusterId: cluster.id, articleId: article.id })
     .onConflictDoNothing();
 
-  const nameNorm = golden.anchorEntity.replace(/\s+/g, '');
+  // W7에서 발견된 버그: 여기서 직접 공백만 지우면(예 "AI 가속기"→"AI가속기") concept.name_norm이
+  // normalizeName()으로 소문자화까지 거친 값("ai가속기")과 대소문자가 달라 CONCEPT_MATCH가
+  // 항상 실패했다 — SUPPLY_DICT 골든셋(G-003~G-009)이 깨끗한 DB에서 전부 떨어지는 원인이었다.
+  // 다른 모든 곳(seed.ts 포함)과 같은 normalizeName()을 그대로 써야 한다.
+  const nameNorm = normalizeName(golden.anchorEntity);
   const [entity] = await db
     .insert(schema.entity)
     .values({

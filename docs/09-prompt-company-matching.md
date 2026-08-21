@@ -1,6 +1,6 @@
 # STEP 9. AI Company Matching — 설계 (Closed-World)
 
-> 프롬프트 원본: `spec/prompts/company_matching.md` (버전 `cm-v1`)
+> 프롬프트 원본: `spec/prompts/company_matching.md` (버전 `cm-v4`)
 
 ## 1. 이 단계의 원칙: LLM은 판사이지 검사가 아니다
 후보를 **찾는 일은 코드가** 하고, LLM은 그 후보를 **기각하거나 등급을 매기는 일만** 한다.
@@ -67,6 +67,12 @@ recall_rule
            └ 아니오 → 사업/공급망/테마/지역/인물 중 해당 유형
 ```
 **`MEME`과 `NAME_MATCH`를 골랐다면 `business_relevance`는 반드시 30 이하**여야 한다. 초과 시 파서가 30으로 강등하고 `G4` 위반 기록.
+
+**W7 실 API 검증에서 드러난 함정**: "표기·발음이 유사할 뿐"인 후보를 LLM이 `REJECT`로 오판하는
+경우가 있었다(자모 유사도가 약할수록 "이 정도로는 관계라고 못 하겠다"고 판단). 하지만 그 후보는
+이미 recall이 유사성을 확인해서 올린 것이므로, 이 트리 안에서는 `REJECT`가 아니라 `MEME`이 맞는
+경로다 — `REJECT`는 표기·발음의 접점조차 없을 때만 쓴다. 프롬프트(`spec/prompts/
+company_matching.md`)에 이 구분을 명시하고 few-shot 예시를 추가해 고쳤다(golden G-003).
 
 ## 6. 반증 검사 (B6, 별도 호출 `counter-check`)
 `business_relevance ≥ 60`인 연결에 한해 두 번째 호출을 한다.

@@ -1,8 +1,13 @@
 /**
  * T2.2.1 — Claude API 클라이언트 래퍼. docs/11 §2-⑤⑥, docs/14 T2.2.1:
  * tool_use 강제(tool_choice + strict), JSON 검증(zod, 호출부가 parseOutput으로 주입),
- * 실패 시 1회 재시도(temperature 0으로 결정론적 호출), 토큰 사용량 반환(비용 기록은
- * llm-run-store가 한다 — 이 클래스는 순수하게 "호출"만 책임진다).
+ * 실패 시 1회 재시도, 토큰 사용량 반환(비용 기록은 llm-run-store가 한다 — 이 클래스는
+ * 순수하게 "호출"만 책임진다).
+ *
+ * W7 라이브 검증에서 발견: `temperature`는 현재 모델 세대(Sonnet 5 등)에서 아예
+ * 제거돼 400을 반환한다 — "temperature 0으로 결정론적 호출"은 더 이상 가능한
+ * 옵션이 아니다(docs/15 W7 기록 참고). tool_choice로 도구 하나를 강제하는 구조 자체가
+ * 이미 출력 형태를 크게 제약하므로 온도 없이도 충분히 안정적이다.
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages';
@@ -70,7 +75,6 @@ export class AnthropicLlmClient {
       const response = await this.client.messages.create({
         model: params.model,
         max_tokens: params.maxTokens ?? 4096,
-        temperature: 0,
         system: params.system,
         messages,
         tools: [tool],

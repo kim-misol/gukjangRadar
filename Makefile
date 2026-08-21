@@ -7,7 +7,7 @@
 .PHONY: help setup install dev web worker \
         up down \
         build typecheck lint format format-check test test-cov \
-        check-enum-sync lint-forbidden-words ci \
+        check-enum-sync lint-forbidden-words ci golden \
         db-generate db-migrate db-seed db-reset \
         clean
 
@@ -42,6 +42,7 @@ help:
 	@echo "  make check-enum-sync     schema.sql ↔ spec/types.ts enum 동기화 검증"
 	@echo "  make lint-forbidden-words  R5 금지어 검사 (추천·수혜주 등)"
 	@echo "  make ci                CI와 동일한 전체 게이트를 로컬에서 순서대로 실행"
+	@echo "  make golden            골든셋 회귀 러너 (실 postgres 필요, .github/workflows/golden.yml과 동일)"
 	@echo ""
 	@echo "  ── DB (Drizzle) ────────────────────────────────────"
 	@echo "  make db-generate      마이그레이션 파일 생성 (drizzle-kit generate)"
@@ -144,6 +145,11 @@ check-enum-sync:
 
 lint-forbidden-words:
 	pnpm lint-forbidden-words
+
+# T4.1(E4.1) — .github/workflows/golden.yml이 부르는 것과 같은 타깃. 실 postgres가 떠 있어야
+# 한다(먼저 make db-migrate && make db-seed). ANTHROPIC_API_KEY 없으면 참조 판정기로 돈다.
+golden:
+	pnpm golden
 
 # CI(.github/workflows/ci.yml)와 완전히 동일한 순서 — 커밋 전 로컬에서 이걸로 먼저 확인한다.
 ci: format-check lint typecheck test check-enum-sync lint-forbidden-words

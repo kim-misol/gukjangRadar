@@ -81,7 +81,8 @@ describe('AnthropicLlmClient.callTool', () => {
     });
     const params = create.mock.calls[0]?.[0];
     expect(params.tool_choice).toEqual({ type: 'tool', name: 'emit_test' });
-    expect(params.temperature).toBe(0);
+    // W7 라이브 검증: temperature는 현재 모델 세대에서 400을 반환해 더 이상 보내지 않는다.
+    expect(params.temperature).toBeUndefined();
     expect(params.tools[0].strict).toBe(true);
   });
 

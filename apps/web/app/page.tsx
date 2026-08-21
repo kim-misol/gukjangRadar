@@ -1,14 +1,41 @@
-export default function HomePage() {
+import { getDb } from '@gukjang/db';
+import { MemeRankBlock } from '../components/home/meme-rank-block';
+import { MoverNewsBlock } from '../components/home/mover-news-block';
+import { NewsClusterCard } from '../components/home/news-cluster-card';
+import { RecentConnectionsBlock } from '../components/home/recent-connections-block';
+import { getHomeData } from '../lib/api/queries';
+
+export const dynamic = 'force-dynamic';
+
+/** S1 홈 — docs/05-screen-specs.md, 레이아웃은 docs/17-screen-design-guide.md 3열 그리드. */
+export default async function HomePage() {
+  const home = await getHomeData(getDb());
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
-      <h1 className="text-2xl font-bold">국장레이더</h1>
-      <p className="text-sm text-gray-500">
-        뉴스와 종목 사이의 숨은 연결고리를 발견하는 서비스. 화면은 W6부터 만든다 (docs/15).
-      </p>
-      <p className="text-xs text-gray-400">
-        국장레이더는 뉴스와 종목의 연결을 보여주는 정보 서비스이며 투자 추천·자문이 아닙니다. 투자
-        판단과 그 결과는 이용자 본인에게 귀속됩니다.
-      </p>
+    <main className="mx-auto max-w-[1280px] px-4 py-6">
+      <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+        <div className="space-y-6 md:col-span-2">
+          <MemeRankBlock items={home.memeRank} />
+          <section>
+            <h2 className="mb-1 border-b border-rule-strong pb-2 font-serif text-lg font-bold text-ink">
+              🔥 지금 화제인 뉴스
+            </h2>
+            {home.clusters.length === 0 ? (
+              <p className="py-6 font-sans text-sm text-ink-soft">오늘은 조용합니다.</p>
+            ) : (
+              <div>
+                {home.clusters.map((cluster, i) => (
+                  <NewsClusterCard key={cluster.id} cluster={cluster} rank={i + 1} />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+        <aside className="space-y-6">
+          <MoverNewsBlock movers={home.movers} isPreMarket={home.isPreMarket} />
+          <RecentConnectionsBlock connections={home.recentConnections} />
+        </aside>
+      </div>
     </main>
   );
 }

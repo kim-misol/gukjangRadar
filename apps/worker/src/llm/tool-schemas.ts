@@ -7,6 +7,14 @@
  * `strict: true`(anthropic-client.ts)를 쓰려면 모든 object 레벨에 `additionalProperties:
  * false`가 있어야 하는데, 문서의 TOOL SCHEMA 블록은 가독성을 위해 이를 생략해 뒀다 —
  * 여기서만 추가한다.
+ *
+ * W7에서 실 API 키로 처음 라이브 검증하다 발견한 버그: Anthropic strict tool use는
+ * `minimum`/`maximum`/`maxLength`/`minItems`/`maxItems` 같은 JSON Schema 제약 키워드를
+ * 지원하지 않는다 — 붙이면 400(`tools.0.custom: For 'integer' type, properties maximum,
+ * minimum are not supported`)으로 요청 자체가 실패한다(docs/15 W7 기록 참고). 값 범위는
+ * 이미 있는 zod 사후 검증(SummaryOutputSchema 등, 실패 시 1회 재시도)이 실제 강제 지점이라
+ * 스키마에서 빼도 안전 그물이 없어지는 게 아니다 — 여기서는 구조(required/enum/
+ * additionalProperties)만 표현한다.
  */
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 
@@ -20,8 +28,6 @@ export const SUMMARY_TOOL: { name: string; description: string; inputSchema: Too
     properties: {
       sentences: {
         type: 'array',
-        minItems: 3,
-        maxItems: 3,
         items: { type: 'string' },
       },
     },
@@ -73,11 +79,11 @@ export const COMPANY_MATCHING_TOOL: {
                 'MEME',
               ],
             },
-            business_relevance: { type: 'integer', minimum: 0, maximum: 100 },
-            meme: { type: 'integer', minimum: 0, maximum: 100 },
-            confidence: { type: 'integer', minimum: 0, maximum: 100 },
-            explanation: { type: 'string', maxLength: 60 },
-            caution: { type: ['string', 'null'], maxLength: 80 },
+            business_relevance: { type: 'integer' },
+            meme: { type: 'integer' },
+            confidence: { type: 'integer' },
+            explanation: { type: 'string' },
+            caution: { type: ['string', 'null'] },
             used_path_steps: { type: 'array', items: { type: 'integer' } },
           },
         },
@@ -100,7 +106,6 @@ export const ENTITY_EXTRACTION_TOOL: {
     properties: {
       entities: {
         type: 'array',
-        maxItems: 20,
         items: {
           type: 'object',
           additionalProperties: false,
@@ -124,7 +129,7 @@ export const ENTITY_EXTRACTION_TOOL: {
               ],
             },
             subtype: { type: 'string' },
-            importance: { type: 'number', minimum: 0, maximum: 1 },
+            importance: { type: 'number' },
             in_headline: { type: 'boolean' },
             role: { type: 'string', enum: ['SUBJECT', 'OBJECT', 'CONTEXT'] },
             aliases: { type: 'array', items: { type: 'string' } },
