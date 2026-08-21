@@ -10,7 +10,11 @@
  * 인증: crtfc_key(발급받은 API 키) 쿼리 파라미터. 레이트리밋은 공개적으로
  * 알려진 "일 20,000회" 기준으로 재시도 백오프를 잡았다(역시 미검증).
  */
-import type { DartCompanyOverviewResponse, DartMajorShareholderResponse } from '@gukjang/core';
+import type {
+  DartCompanyOverviewResponse,
+  DartDisclosureListResponse,
+  DartMajorShareholderResponse,
+} from '@gukjang/core';
 
 const DART_BASE_URL = 'https://opendart.fss.or.kr/api';
 
@@ -71,6 +75,31 @@ export class DartClient {
       throw new Error(`DART 최대주주 현황 조회 실패 (status=${json.status}): ${json.message}`);
     }
     return json.list ?? [];
+  }
+
+  /**
+   * 공시검색(list.json) — T2.3.5 반증검사의 "최근 공시 제목" 입력.
+   * status=013(공시 없음)이면 빈 list로 정상 반환한다(오류 아님, "이 기간엔 공시가 없다"는
+   * 정상 응답 — fetchMajorShareholders와 같은 원칙).
+   */
+  async fetchDisclosureList(
+    corpCode: string,
+    bgnDe: string,
+    endDe: string,
+    pageCount = 10,
+  ): Promise<DartDisclosureListResponse> {
+    const json = await this.getJson<DartDisclosureListResponse>('/list.json', {
+      corp_code: corpCode,
+      bgn_de: bgnDe,
+      end_de: endDe,
+      page_count: String(pageCount),
+      page_no: '1',
+    });
+    if (json.status === STATUS_NO_DATA) return { ...json, list: [] };
+    if (json.status !== STATUS_OK) {
+      throw new Error(`DART 공시검색 조회 실패 (status=${json.status}): ${json.message}`);
+    }
+    return json;
   }
 
   private async getJson<T>(path: string, params: Record<string, string>): Promise<T> {

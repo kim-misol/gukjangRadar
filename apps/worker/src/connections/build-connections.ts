@@ -1,10 +1,11 @@
 /**
- * T2.3.3(경로 조립 마무리)+2.3.4(LLM 심사)+2.3.6(가드레일)+2.3.7(스코어링)+2.3.8(저장) —
- * `connection.build` 큐가 클러스터 하나에 대해 돌리는 파이프라인 본체.
- * docs/11 §2 ⑧⑨⑪⑫⑬, 반증검사(⑩·T2.3.5)는 이번 주(W5) 범위에서 제외한다(docs/15).
+ * T2.3.3(경로 조립 마무리)+2.3.4(LLM 심사)+2.3.5(반증검사)+2.3.6(가드레일)+2.3.7(스코어링)+
+ * 2.3.8(저장) — `connection.build` 큐가 클러스터 하나에 대해 돌리는 파이프라인 본체.
+ * docs/11 §2 ⑧⑨⑩⑪⑫⑬.
  *
  * 흐름: 클러스터의 개체마다 → Recall(findCandidatesForEntity) → 후보가 있으면 LLM 심사
- * (company_matching.md) → 가드레일 G1~G9 → 스코어링(§10) → connection upsert.
+ * (company_matching.md) → 가드레일 G1~G9 → business_relevance≥60이면 반증검사(counter-check.ts,
+ * config.counterCheck가 있을 때만) → 스코어링(§10) → connection upsert.
  * 시세(⑪)는 W7 KIS 배치 의존이라 이번 주는 marketReaction이 항상 null이다(§3 재정규화 경로 그대로).
  */
 import {
@@ -40,6 +41,11 @@ import { findCachedOutput, isUnderDailyCap, recordLlmRun } from '../llm/llm-run-
 import { getModelRates } from '../llm/model-pricing';
 import { COMPANY_MATCHING_TOOL } from '../llm/tool-schemas';
 import { findCandidatesForEntity } from './search-candidates';
+import {
+  COUNTER_CHECK_BR_THRESHOLD,
+  runCounterCheck,
+  type CounterCheckDeps,
+} from './counter-check';
 
 export interface BuildConnectionsConfig {
   matchModel: string;
@@ -49,6 +55,8 @@ export interface BuildConnectionsConfig {
   meme: MemeConfig;
   scoring: ScoringConfig;
   reviewTriggers: ReviewTriggersConfig;
+  /** T2.3.5 반증검사 — 없으면(DART_API_KEY 미설정 등) 이 단계를 건너뛴다. */
+  counterCheck?: Pick<CounterCheckDeps, 'dartClient' | 'model'>;
 }
 
 export interface BuildConnectionsResult {
@@ -64,16 +72,25 @@ function pathLabelsDisplay(candidate: Candidate): string {
 
 async function fetchCompanyDetails(db: ReturnType<typeof getDb>, companyIds: readonly number[]) {
   if (companyIds.length === 0)
-    return new Map<number, { sector: string | null; businessSummary: string | null }>();
+    return new Map<
+      number,
+      { sector: string | null; businessSummary: string | null; corpCode: string | null }
+    >();
   const rows = await db
     .select({
       id: schema.company.id,
       sector: schema.company.sector,
       businessSummary: schema.company.businessSummary,
+      corpCode: schema.company.corpCode,
     })
     .from(schema.company)
     .where(inArray(schema.company.id, [...companyIds]));
-  return new Map(rows.map((r) => [r.id, { sector: r.sector, businessSummary: r.businessSummary }]));
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      { sector: r.sector, businessSummary: r.businessSummary, corpCode: r.corpCode },
+    ]),
+  );
 }
 
 async function fetchAllKnownCompanyTerms(db: ReturnType<typeof getDb>) {
@@ -286,19 +303,51 @@ export async function buildConnectionsForCluster(
       if (guardrailResult.judgement.verdict !== 'ACCEPT') continue;
 
       const j = guardrailResult.judgement;
+
+      // T2.3.5 — 반증검사(docs/09 §6): BR≥60 주장만, config.counterCheck가 있을 때만 돌린다.
+      let businessRelevance = j.businessRelevance;
+      let counterEvidence: string | null = null;
+      if (config.counterCheck && businessRelevance >= COUNTER_CHECK_BR_THRESHOLD) {
+        const companyDetail = companyDetails.get(candidate.companyId);
+        const counterResult = await runCounterCheck(
+          {
+            db,
+            llmClient,
+            dartClient: config.counterCheck.dartClient,
+            model: config.counterCheck.model,
+            dailyCostCapUsd: config.dailyCostCapUsd,
+            now,
+          },
+          {
+            clusterId,
+            claim: j.explanation,
+            companyId: candidate.companyId,
+            companyName: candidate.name,
+            ticker: candidate.ticker,
+            corpCode: companyDetail?.corpCode ?? null,
+            businessSummary: companyDetail?.businessSummary ?? null,
+          },
+          businessRelevance,
+        );
+        if (counterResult.refuted) {
+          businessRelevance = counterResult.adjustedRelevance;
+          counterEvidence = counterResult.reason;
+        }
+      }
+
       const supplyChainScore = computeSupplyChainScore(candidate.path, candidate.pathEdgeWeights);
       const confidenceScore = computeConfidenceScore(candidate.pathEdgeConfidences, j.confidence);
       const memeScore = computeMemeScore(
         {
           memeLlm: j.meme,
-          businessRelevance: j.businessRelevance,
+          businessRelevance,
           marketReaction: null,
           connectionType: j.connectionType,
         },
         config.meme,
       );
       const rawScores = {
-        businessRelevance: j.businessRelevance,
+        businessRelevance,
         keywordMatch: candidate.keywordMatchScore,
         supplyChain: supplyChainScore,
         marketReaction: null,
@@ -316,10 +365,10 @@ export async function buildConnectionsForCluster(
         },
         config.scoring,
       );
-      const relevanceBand = computeRelevanceBand(j.businessRelevance, config.scoring.relevanceBand);
+      const relevanceBand = computeRelevanceBand(businessRelevance, config.scoring.relevanceBand);
       const status = decideConnectionStatus(
         {
-          businessRelevance: j.businessRelevance,
+          businessRelevance,
           connectionScore,
           memeScore,
           hopCount: candidate.hopCount,
@@ -337,7 +386,8 @@ export async function buildConnectionsForCluster(
         tradeDate: cluster.tradeDate,
         path: candidate.path,
         hopCount: candidate.hopCount,
-        businessRelevanceScore: j.businessRelevance,
+        businessRelevanceScore: businessRelevance,
+        counterEvidence,
         keywordMatchScore: candidate.keywordMatchScore,
         supplyChainScore,
         marketReactionScore: 0,

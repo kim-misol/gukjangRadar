@@ -106,9 +106,15 @@ const SEED_COMPANIES: SeedCompany[] = [
 /**
  * W5(T2.3.1) THEME_DICT/SUPPLY_DICT 개념 사전 — spec/prompts/company_matching.md FEW-SHOT
  * "엔비디아 → AI 가속기 → HBM → SK하이닉스" / "...→ 반도체장비 → 한미반도체" 예시를 그대로
- * 최소 시드로 재현한다. docs/14 backlog T1.2.4(테마 300개)/T1.2.5(공급망 100쌍)의 전체 사전은
- * 아직 없다 — 이 4행은 그 전체 사전이 아니라 Recall 엔진(T2.3.1)이 실제로 동작함을 증명하는
- * 최소 예시다(W2의 business_summary/AFFILIATION처럼 실제 데이터가 준비되는 대로 확장할 것).
+ * 최소 시드로 재현한다.
+ *
+ * W8(A6, docs/19-remaining-work.md §2)에서 THEME_DICT(BELONGS_TO)를 SEED_COMPANIES에 있는
+ * 22개 회사 전부를 대상으로 확장했다 — docs/14 backlog T1.2.4가 목표하는 "수기 300~500개"에는
+ * 한참 못 미친다. 이유는 노력 부족이 아니라 이 개발 환경의 `company` 테이블 자체가 22개뿐이기
+ * 때문이다(T1.1.1 KRX 전종목 수집기는 이 샌드박스에서 네트워크가 막혀 있어 실행 못 함 — DART와
+ * 같은 사유). 실 KRX 목록이 로드되기 전까지는 사전을 더 늘려도 참조할 회사가 없어 의미가 없다.
+ * 여기 적힌 테마 분류는 전부 일반적으로 잘 알려진, 이견 없는 수준의 분류만 담았다(예: LG화학처럼
+ * 여러 사업을 겸업하는 회사는 대표 사업만).
  */
 interface SeedConcept {
   name: string;
@@ -118,6 +124,16 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { name: 'AI가속기', kind: 'PRODUCT' },
   { name: 'HBM', kind: 'MATERIAL' },
   { name: '반도체장비', kind: 'INDUSTRY' },
+  { name: '반도체', kind: 'INDUSTRY' },
+  { name: '도료', kind: 'INDUSTRY' },
+  { name: '2차전지', kind: 'INDUSTRY' },
+  { name: '자동차', kind: 'INDUSTRY' },
+  { name: '인터넷플랫폼', kind: 'INDUSTRY' },
+  { name: '바이오', kind: 'INDUSTRY' },
+  { name: '철강', kind: 'INDUSTRY' },
+  { name: '화학', kind: 'INDUSTRY' },
+  { name: '가구', kind: 'INDUSTRY' },
+  { name: '항공', kind: 'INDUSTRY' },
 ];
 interface SeedConceptEdge {
   from: string;
@@ -133,6 +149,32 @@ const SEED_CONCEPT_EDGES: SeedConceptEdge[] = [
 const SEED_SUPPLY_CHAIN_EDGES: { conceptName: string; companyTicker: string; weight: number }[] = [
   { conceptName: 'HBM', companyTicker: '000660', weight: 0.85 },
   { conceptName: '반도체장비', companyTicker: '042700', weight: 0.7 },
+];
+/**
+ * concept → company 소속(테마) 엣지 — A6(docs/19 §2). 순수 산업 분류이지 공급망 관계가
+ * 아니므로 edgeType은 항상 BELONGS_TO(recall/graph-walk.ts가 SUPPLY_CHAIN이 섞이지 않으면
+ * THEME_DICT로 분류한다).
+ */
+const SEED_THEME_EDGES: { conceptName: string; companyTicker: string; weight: number }[] = [
+  { conceptName: '반도체', companyTicker: '005930', weight: 0.9 }, // 삼성전자
+  { conceptName: '반도체', companyTicker: '000660', weight: 0.9 }, // SK하이닉스
+  { conceptName: '반도체장비', companyTicker: '240810', weight: 0.85 }, // 원익IPS
+  { conceptName: '도료', companyTicker: '090350', weight: 0.9 }, // 노루페인트
+  { conceptName: '2차전지', companyTicker: '373220', weight: 0.9 }, // LG에너지솔루션
+  { conceptName: '2차전지', companyTicker: '086520', weight: 0.8 }, // 에코프로
+  { conceptName: '2차전지', companyTicker: '247540', weight: 0.85 }, // 에코프로비엠
+  { conceptName: '2차전지', companyTicker: '051910', weight: 0.6 }, // LG화학(2차전지소재 겸업)
+  { conceptName: '자동차', companyTicker: '005380', weight: 0.9 }, // 현대차
+  { conceptName: '자동차', companyTicker: '000270', weight: 0.9 }, // 기아
+  { conceptName: '인터넷플랫폼', companyTicker: '035420', weight: 0.9 }, // NAVER
+  { conceptName: '인터넷플랫폼', companyTicker: '035720', weight: 0.9 }, // 카카오
+  { conceptName: '바이오', companyTicker: '068270', weight: 0.9 }, // 셀트리온
+  { conceptName: '바이오', companyTicker: '207940', weight: 0.9 }, // 삼성바이오로직스
+  { conceptName: '바이오', companyTicker: '215600', weight: 0.85 }, // 신라젠
+  { conceptName: '철강', companyTicker: '005490', weight: 0.8 }, // POSCO홀딩스
+  { conceptName: '화학', companyTicker: '051910', weight: 0.85 }, // LG화학
+  { conceptName: '가구', companyTicker: '009240', weight: 0.9 }, // 한샘
+  { conceptName: '항공', companyTicker: '003490', weight: 0.9 }, // 대한항공
 ];
 
 /**
@@ -368,7 +410,11 @@ async function main(): Promise<void> {
     }
 
     const companyNodeIdByTicker = new Map<string, number>();
-    for (const ticker of SEED_SUPPLY_CHAIN_EDGES.map((e) => e.companyTicker)) {
+    const themeAndSupplyTickers = [
+      ...SEED_SUPPLY_CHAIN_EDGES.map((e) => e.companyTicker),
+      ...SEED_THEME_EDGES.map((e) => e.companyTicker),
+    ];
+    for (const ticker of themeAndSupplyTickers) {
       if (companyNodeIdByTicker.has(ticker)) continue;
       const companyId = companyIdByTicker.get(ticker);
       const company = SEED_COMPANIES.find((c) => c.ticker === ticker);
@@ -425,6 +471,33 @@ async function main(): Promise<void> {
           confidence: e.weight.toString(),
           origin: 'DICTIONARY',
           evidence: { source: 'DICTIONARY', label: `${e.conceptName} 공급망`, seed: true },
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.graphEdge.srcNodeId,
+            schema.graphEdge.dstNodeId,
+            schema.graphEdge.edgeType,
+          ],
+          set: { weight: e.weight.toString(), confidence: e.weight.toString() },
+        });
+    }
+
+    // A6(docs/19 §2) — 테마 소속(BELONGS_TO) 엣지.
+    for (const e of SEED_THEME_EDGES) {
+      const srcNodeId = conceptNodeIdByName.get(e.conceptName);
+      const dstNodeId = companyNodeIdByTicker.get(e.companyTicker);
+      if (!srcNodeId || !dstNodeId)
+        throw new Error(`테마 엣지 노드 없음: ${e.conceptName} → ${e.companyTicker}`);
+      await tx
+        .insert(schema.graphEdge)
+        .values({
+          srcNodeId,
+          dstNodeId,
+          edgeType: 'BELONGS_TO',
+          weight: e.weight.toString(),
+          confidence: e.weight.toString(),
+          origin: 'DICTIONARY',
+          evidence: { source: 'DICTIONARY', label: `${e.conceptName} 테마`, seed: true },
         })
         .onConflictDoUpdate({
           target: [

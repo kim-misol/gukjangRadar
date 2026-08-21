@@ -20,6 +20,7 @@
     "manual-verify-news-pipeline": "tsx scripts/manual-verify-news-pipeline.ts",
     "manual-verify-analysis": "tsx scripts/manual-verify-analysis.ts",
     "manual-verify-connections": "tsx scripts/manual-verify-connections.ts",
+    "manual-verify-counter-check": "tsx scripts/manual-verify-counter-check.ts",
     "manual-verify-market-snapshot": "tsx scripts/manual-verify-market-snapshot.ts",
     "manual-verify-w8-alerts": "tsx scripts/manual-verify-w8-alerts.ts",
     "golden": "tsx scripts/run-golden.ts",

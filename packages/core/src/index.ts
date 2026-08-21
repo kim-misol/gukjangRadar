@@ -9,6 +9,7 @@ export * from './krx/map-company';
 export * from './dart/types';
 export * from './dart/business-summary';
 export * from './dart/map-affiliation';
+export * from './dart/disclosure-titles';
 export * from './news/types';
 export * from './news/title-normalize';
 export * from './news/simhash';

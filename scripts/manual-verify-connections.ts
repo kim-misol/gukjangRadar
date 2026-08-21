@@ -29,6 +29,7 @@ import { findCandidatesForEntity } from '../apps/worker/src/connections/search-c
 import { buildConnectionsForCluster } from '../apps/worker/src/connections/build-connections';
 import { ensureGraphNode } from '../apps/worker/src/graph/ensure-node';
 import { makeReferenceJudgeClient } from './lib/reference-judge';
+import { setupClusterWithEntity } from './lib/fixtures';
 
 const now = new Date('2026-08-21T10:00:00+09:00');
 const MATCH_MODEL = 'claude-sonnet-5';
@@ -43,95 +44,12 @@ const config = {
   reviewTriggers: scoringConfig.reviewTriggers as ReviewTriggersConfig,
 };
 
-async function setupClusterWithEntity(
-  db: ReturnType<typeof getDb>,
-  opts: {
-    urlSuffix: string;
-    headline: string;
-    entityName: string;
-    entityKind: 'WORD' | 'PRODUCT';
-    subtype?: string;
-  },
-): Promise<{ clusterId: number; entityId: number; entityNodeId: number }> {
-  const [source] = await db
-    .insert(schema.newsSource)
-    .values({ name: 'fixture:연결엔진', domain: 'fixture.local', tier: 1, kind: 'RSS' })
-    .onConflictDoUpdate({ target: schema.newsSource.name, set: { tier: 1 } })
-    .returning({ id: schema.newsSource.id });
-  if (!source) throw new Error('news_source 생성 실패');
-
-  const url = `https://fixture.local/connections/${opts.urlSuffix}`;
-  const [article] = await db
-    .insert(schema.newsArticle)
-    .values({ sourceId: source.id, url, title: opts.headline, publishedAt: now, simhash: 0 })
-    .onConflictDoUpdate({ target: schema.newsArticle.url, set: { title: opts.headline } })
-    .returning({ id: schema.newsArticle.id });
-  if (!article) throw new Error('news_article 생성 실패');
-
-  const [cluster] = await db
-    .insert(schema.newsCluster)
-    .values({
-      headline: opts.headline,
-      aiSummary: `${opts.headline}. 관련 내용이 이어졌다. 시장의 관심이 모였다.`,
-      tradeDate: '2026-08-21',
-      firstSeenAt: now,
-      lastSeenAt: now,
-      articleCount: 1,
-      representativeArticleId: article.id,
-      analysisStatus: 'DONE',
-    })
-    .returning({ id: schema.newsCluster.id });
-  if (!cluster) throw new Error('news_cluster 생성 실패');
-
-  await db
-    .insert(schema.clusterArticle)
-    .values({ clusterId: cluster.id, articleId: article.id })
-    .onConflictDoNothing();
-
-  const nameNorm = opts.entityName.replace(/\s+/g, '');
-  const [entity] = await db
-    .insert(schema.entity)
-    .values({
-      name: opts.entityName,
-      nameNorm,
-      nameJamo: nameNorm,
-      kind: opts.entityKind,
-      subtype: opts.subtype,
-      mentionTotal: 1,
-    })
-    .onConflictDoUpdate({
-      target: [schema.entity.nameNorm, schema.entity.kind],
-      set: { mentionTotal: 1 },
-    })
-    .returning({ id: schema.entity.id });
-  if (!entity) throw new Error('entity 생성 실패');
-
-  const entityNodeId = await ensureGraphNode(db, 'ENTITY', entity.id, opts.entityName);
-
-  await db
-    .insert(schema.newsEntity)
-    .values({
-      clusterId: cluster.id,
-      entityId: entity.id,
-      importance: '1',
-      inHeadline: true,
-      role: 'SUBJECT',
-      mentionCount: 1,
-    })
-    .onConflictDoUpdate({
-      target: [schema.newsEntity.clusterId, schema.newsEntity.entityId],
-      set: { importance: '1' },
-    });
-
-  return { clusterId: cluster.id, entityId: entity.id, entityNodeId };
-}
-
 async function main(): Promise<void> {
   const db = getDb();
   let failed = false;
 
   console.log('=== 1) "노루" → 노루페인트/노루홀딩스 두 후보 모두 recall되어 판정·저장된다 ===');
-  const noru = await setupClusterWithEntity(db, {
+  const noru = await setupClusterWithEntity(db, now, {
     urlSuffix: 'typhoon-noru',
     headline: "제11호 태풍 '노루' 북상… 제주 직접 영향권",
     entityName: '노루',
@@ -251,7 +169,7 @@ async function main(): Promise<void> {
   }
 
   console.log('\n=== 2) "AI 가속기" → SUPPLY_CHAIN(SK하이닉스/한미반도체, 개념사전 경유) ===');
-  const ai = await setupClusterWithEntity(db, {
+  const ai = await setupClusterWithEntity(db, now, {
     urlSuffix: 'ai-accelerator',
     headline: '엔비디아, 차세대 AI 가속기 공개',
     entityName: 'AI 가속기',
@@ -308,7 +226,7 @@ async function main(): Promise<void> {
   }
 
   console.log('\n=== 3) G7: 재난 헤드라인에서 MEME 판정은 저장되지 않는다 ===');
-  const disaster = await setupClusterWithEntity(db, {
+  const disaster = await setupClusterWithEntity(db, now, {
     urlSuffix: 'noru-disaster',
     headline: "태풍 '노루' 북상 중 다중 추돌 사고로 사상자 발생",
     entityName: '노루',
@@ -353,7 +271,7 @@ async function main(): Promise<void> {
   void beforeViolations;
 
   console.log('\n=== 4) G4: MEME/NAME_MATCH인데 BR>30이면 30으로 강등되어 저장된다 ===');
-  const g4 = await setupClusterWithEntity(db, {
+  const g4 = await setupClusterWithEntity(db, now, {
     urlSuffix: 'noru-g4',
     headline: "제11호 태풍 '노루' 북상 관련 속보",
     entityName: '노루',

@@ -75,6 +75,11 @@ recall_rule
 company_matching.md`)에 이 구분을 명시하고 few-shot 예시를 추가해 고쳤다(golden G-003).
 
 ## 6. 반증 검사 (B6, 별도 호출 `counter-check`)
+> 프롬프트 원본: `spec/prompts/counter_check.md` (버전 `cc-v1`). 구현: `apps/worker/src/
+> connections/counter-check.ts`, W8(docs/15 W8 진행 기록) — DART/LLM 어느 쪽이 실패해도
+> fail open(원래 판정 유지)한다. 이 샌드박스는 DART 네트워크가 막혀 있어 fake-client +
+> 실 postgres로만 검증했다(`pnpm manual-verify-counter-check`) — dart-client.ts와 같은 처지.
+
 `business_relevance ≥ 60`인 연결에 한해 두 번째 호출을 한다.
 > "다음 주장을 **반박**해 보라. 반박에 실패하면 그대로 두라."
 

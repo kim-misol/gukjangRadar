@@ -390,6 +390,29 @@ paths:
                 properties:
                   items: { type: array, items: { $ref: '#/components/schemas/Connection' } }
 
+  /v1/admin/llm-costs:
+    get:
+      tags: [admin]
+      security: [ { bearerAuth: [] } ]
+      summary: T5(D5) LLM 비용 모니터 — 오늘 누적/단계별/모델별/상태별 + 최근 7일 추이
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dailyCapUsd: { type: number }
+                  today:
+                    type: object
+                    properties:
+                      totalCostUsd: { type: number }
+                      byStage: { type: array, items: { type: object, additionalProperties: true } }
+                      byModel: { type: array, items: { type: object, additionalProperties: true } }
+                      byStatus: { type: array, items: { type: object, additionalProperties: true } }
+                  last7Days: { type: array, items: { type: object, additionalProperties: true } }
+
   /v1/admin/connections/{connectionId}/review:
     post:
       tags: [admin]

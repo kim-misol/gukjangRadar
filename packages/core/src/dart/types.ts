@@ -48,3 +48,24 @@ export interface DartMajorShareholderRow {
 export interface DartMajorShareholderResponse extends DartApiEnvelope {
   list?: DartMajorShareholderRow[];
 }
+
+/** 공시검색(list.json) 응답의 행 하나 — B6 반증검사의 "최근 공시 제목" 입력. */
+export interface DartDisclosureRow {
+  corp_code?: string;
+  corp_name?: string;
+  stock_code?: string;
+  corp_cls?: string;
+  report_nm: string; // 공시서류명(제목)
+  rcept_no?: string;
+  flr_nm?: string;
+  rcept_dt?: string; // YYYYMMDD
+  rm?: string;
+}
+
+export interface DartDisclosureListResponse extends DartApiEnvelope {
+  page_no?: number;
+  page_count?: number;
+  total_count?: number;
+  total_page?: number;
+  list?: DartDisclosureRow[];
+}

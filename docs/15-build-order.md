@@ -739,6 +739,68 @@ web 49+worker 40)/check-enum-sync/lint-forbidden-words), `next build` 프로덕�
 경로). Docker 빌드 자체와 실 Sentry/Kakao/Google 계정 연동은 이 환경의 한계로 미검증 —
 정직하게 남긴다.
 
+**백로그 정리 (커밋 후 계속, 2026-08-21)**: `docs/19-remaining-work.md`를 만들어 W1~W8
+전체에서 미룬 것을 한 곳에 모았고, 그중 우선순위 최상단인 M등급(V1 필수인데 비어 있던) 항목
+3개를 순서대로 처리했다.
+
+**B6 반증 검사(T2.3.5, docs/09 §6)** — W5부터 "이번 주 범위 아님"으로 계속 미뤄졌던 게
+사실은 `docs/04-mvp-features.md` 기준 M(V1 필수) 등급이었다는 걸 이번에 다시 확인하고 만들었다.
+- `spec/prompts/counter_check.md`(cc-v1) 신설 — company_matching.md와 같은 형식(SYSTEM/
+  TOOL SCHEMA/USER/FEW-SHOT). "반박해 보라, 실패하면 그대로 두라"는 docs/09 §6 원문 그대로,
+  반박 성공 시에만 `counterEvidence`를 채운다(반박 실패 시엔 null — docs/13 §3 "반박 성공 시
+  ... 노출한다"를 문자 그대로 해석).
+- `apps/worker/src/collectors/dart-client.ts`에 `fetchDisclosureList`(공시검색 list.json)
+  추가 — "최근 공시 제목 10개" 입력의 출처. 이 샌드박스는 opendart.fss.or.kr 자체가 막혀 있어
+  (dart-client.ts 파일 헤더 코멘트) fake fetch로만 테스트.
+- `apps/worker/src/connections/counter-check.ts`: DART/LLM 어느 쪽이 실패해도 원래 판정을
+  그대로 두는 fail-open 설계 — "이 기능이 없어도 되던 이전 동작보다 나빠지지 않는다"는
+  원칙. `build-connections.ts`에 `config.counterCheck`(옵션)로 배선 — `DART_API_KEY`가
+  없으면(현재 이 환경 포함, 실 배포에선 있음) 이 단계 자체를 건너뛴다.
+- G6 가드레일(반증검사 없던 시절의 임시 대체 조치, "BR≥60인데 근거 토큰 없으면 59로 강등")은
+  그대로 뒀다 — 무료 결정론적 1차 방어선으로 여전히 유효해서, 반증검사(2차, LLM 기반)와
+  같이 쓰는 게 "4중 방어" 철학(docs/13 §0)에 더 맞는다고 판단했다.
+- **실 검증**: `scripts/manual-verify-counter-check.ts`(신설, `pnpm manual-verify-counter-check`) —
+  기존 "AI 가속기" recall 시나리오(SK하이닉스/한미반도체, W5부터 있던 fixture)를 재사용해
+  실 postgres로 4가지 확인: (1) BR≥60+corp_code 있음(SK하이닉스) → DART 실제 호출 +
+  refuted:true 응답이 businessRelevanceScore/counterEvidence를 실제로 조정, (2) BR≥60인데
+  corp_code 없음(한미반도체, 실 시드 데이터가 원래 그랬다) → DART는 건너뛰고도 반증검사
+  자체는(공시 없음 placeholder로) 진행, refuted:false면 원값 유지, (3) BR<60이면 반증검사
+  자체가 안 걸림(DART/LLM 호출 0건), (4) 재실행해도 `llm_run(stage=COUNTER)`이 안 늘어남
+  (input_hash 캐시). `manual-verify-connections.ts`가 쓰던 fixture 헬퍼(`setupClusterWithEntity`)를
+  `scripts/lib/fixtures.ts`로 뽑아 두 스크립트가 공유하게 정리(그 김에 기존 스크립트도
+  재확인 — 여전히 전체 통과).
+- **미룬 것**: 골든셋(`spec/golden/golden_set.jsonl`)에 반증검사 전용 케이스는 아직 없다 —
+  골든셋은 MATCH 단계(연결 유형 판정)를 테스트하는 포맷이라 반증검사(그 이후 단계)를 검증하려면
+  케이스 포맷 확장이 먼저 필요하다. 지금은 유닛테스트(6건) + 수동 검증 스크립트로만 커버.
+
+**D5 LLM 비용 모니터** — 집행(일일 상한 초과 시 스킵)은 이미 있었지만 "모니터"라 부를 조회
+화면이 없었다. `GET /v1/admin/llm-costs`(관리자 전용, 기존 `ADMIN_API_TOKEN` 게이트 재사용) +
+`/admin/costs` 페이지: 오늘 누적 비용/상한 대비 비율, stage별·model별 비용·호출수, 오늘
+status별 집계(OK/ERROR/INVALID_JSON/GUARDRAIL_BLOCKED), 최근 7일 추이. 실 로컬 postgres로
+확인 — 이번 세션에 쌓인 실 `llm_run` 데이터(SUMMARY/ENTITY/MATCH/COUNTER 전 단계, 누적
+$2.01)가 그대로 집계돼 나오는 것까지 봤다. **미룬 것**: 일일 상한 초과로 "스킵된" 호출은
+애초에 `llm_run` 행 자체가 안 남아(코드가 그냥 `continue`함) 이 모니터에도 안 잡힌다 —
+스킵 이벤트를 별도로 기록하려면 build-connections.ts 쪽에 새 기록 지점이 필요해 이번엔 안
+건드림.
+
+**A6 산업/테마 사전 확장** — `concept` 테이블이 실 DB에 3행뿐이던 걸 13행으로,
+`BELONGS_TO`(테마 소속) 엣지를 2건에서 19건으로 늘렸다(`packages/db/src/seed.ts`
+`SEED_THEME_EDGES`). **목표(300~500개)에는 크게 못 미친다 — 노력 부족이 아니라 이 개발
+환경의 `company` 테이블 자체가 21개뿐이기 때문**이다(T1.1.1 KRX 전종목 수집기가 이
+샌드박스에서 네트워크가 막혀 실행 못 함, DART와 같은 사유). 지금 시드된 21개 회사 전부를
+대상으로, 이견 없는 수준의 잘 알려진 분류(반도체/도료/2차전지/자동차/인터넷플랫폼/바이오/
+철강/화학/가구/항공)만 담았다 — 겸업 회사(LG화학처럼 화학+2차전지소재)는 대표 사업만
+붙이거나 낮은 weight로 부수 사업을 표시. 실 KRX 목록이 로드되기 전까지는 사전을 더 늘려도
+참조할 회사가 없어 의미가 없다 — 이후 확장은 T1.1.1이 실제로 도는 배포 환경에서.
+**실 검증**: `pnpm db:seed` 재실행(idempotent 확인) → entity "반도체 업황"으로
+`findCandidatesForEntity`를 직접 호출해 실 postgres에서 삼성전자/SK하이닉스가 정확히
+`THEME_DICT`(concept "반도체" 경유)로 recall되는 것 확인. `manual-verify-connections.ts`
+재실행해 기존 시나리오(노루/AI가속기/G7/G4/멱등성)가 전부 그대로 통과하는 것도 재확인함
+(사전 확장이 기존 recall 결과를 건드리지 않음).
+
+**검증(백로그 정리 3건)**: `make ci` 클린 통과(format-check/lint/typecheck/test 395건
+(core 298+web 49+worker 48)/check-enum-sync/lint-forbidden-words 190개 파일).
+
 ---
 ## 주차별 게이트 (통과 못 하면 다음 주로 넘어가지 않는다)
 | 주 | 게이트 |

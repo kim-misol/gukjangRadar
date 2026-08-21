@@ -3,6 +3,7 @@ import {
   SummaryOutputSchema,
   EntityExtractionOutputSchema,
   CompanyMatchingOutputSchema,
+  CounterCheckOutputSchema,
   toLlmJudgement,
 } from './types';
 
@@ -165,6 +166,46 @@ describe('CompanyMatchingOutputSchema', () => {
           explanation: 'x',
         },
       ],
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('CounterCheckOutputSchema', () => {
+  // spec/prompts/counter_check.md FEW-SHOT(SK하이닉스, 반박 실패) 예시를 그대로 통과시킨다.
+  it('반박 실패(refuted:false) 예시를 통과시킨다', () => {
+    const result = CounterCheckOutputSchema.safeParse({
+      refuted: false,
+      reason: '사업 개요와 최근 공시 모두 HBM 생산·공급 사실을 확인해 줍니다.',
+      adjusted_relevance: 85,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('반박 성공(refuted:true) 예시를 통과시킨다', () => {
+    const result = CounterCheckOutputSchema.safeParse({
+      refuted: true,
+      reason:
+        '원익홀딩스: 반도체·디스플레이 장비 지주회사. 이차전지 리사이클 관련 사업은 확인되지 않습니다.',
+      adjusted_relevance: 15,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('100자를 초과하는 reason은 실패', () => {
+    const result = CounterCheckOutputSchema.safeParse({
+      refuted: true,
+      reason: '가'.repeat(101),
+      adjusted_relevance: 10,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('adjusted_relevance가 0~100 범위를 벗어나면 실패', () => {
+    const result = CounterCheckOutputSchema.safeParse({
+      refuted: false,
+      reason: 'x',
+      adjusted_relevance: 101,
     });
     expect(result.success).toBe(false);
   });

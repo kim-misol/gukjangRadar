@@ -33,7 +33,8 @@ LLM 하나에 프롬프트로 부탁하는 방식은 반드시 실패한다. 방
 모든 위반은 `guardrail_violation` 테이블에 기록. 일일 위반 추이가 프롬프트 회귀 조기경보다.
 
 ## 3. 3층 — 반증 검사
-`09-prompt-company-matching.md §6`. `BR ≥ 60`인 연결만 대상(비용 통제).
+`09-prompt-company-matching.md §6`(구현 완료, W8 — `apps/worker/src/connections/
+counter-check.ts`). `BR ≥ 60`인 연결만 대상(비용 통제).
 반박 성공 시 `counter_evidence`에 사유를 남기고 **사용자 화면에도 노출**한다. 이게 신뢰의 원천이다.
 > "노루페인트: 도료·페인트 제조업. 최근 사업보고서에서 기상·재해 관련 매출 항목은 확인되지 않았습니다."
 

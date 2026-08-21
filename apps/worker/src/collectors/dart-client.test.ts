@@ -83,6 +83,41 @@ describe('DartClient', () => {
     expect(list?.[0]?.nm).toBe('노루홀딩스');
   });
 
+  it('공시검색 목록을 정상 파싱한다', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({
+        status: '000',
+        message: '정상',
+        list: [
+          { report_nm: '분기보고서' },
+          { report_nm: '임원ㆍ주요주주특정증권등소유상황보고서' },
+        ],
+      }),
+    );
+    const client = new DartClient({
+      apiKey: 'test-key',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const res = await client.fetchDisclosureList('00126380', '20260101', '20260821');
+    expect(res.list).toHaveLength(2);
+    const calledUrl = (fetchImpl.mock.calls[0] as unknown[])[0] as string;
+    expect(calledUrl).toContain('corp_code=00126380');
+    expect(calledUrl).toContain('bgn_de=20260101');
+    expect(calledUrl).toContain('end_de=20260821');
+  });
+
+  it('공시검색 status=013(공시 없음)이면 빈 list로 정상 반환한다', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ status: '013', message: '조회된 데이터가 없습니다' }));
+    const client = new DartClient({
+      apiKey: 'test-key',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const res = await client.fetchDisclosureList('00126380', '20260101', '20260821');
+    expect(res.list).toEqual([]);
+  });
+
   it('HTTP 오류 시 재시도 후 실패하면 던진다', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, false, 500));
     const client = new DartClient({

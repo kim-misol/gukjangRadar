@@ -56,6 +56,14 @@ export const CompanyMatchingOutputSchema = z.object({
 });
 export type CompanyMatchingOutput = z.infer<typeof CompanyMatchingOutputSchema>;
 
+// T2.3.5 — spec/prompts/counter_check.md TOOL SCHEMA(emit_counter_check) 그대로.
+export const CounterCheckOutputSchema = z.object({
+  refuted: z.boolean(),
+  reason: z.string().max(100),
+  adjusted_relevance: z.number().int().min(0).max(100),
+});
+export type CounterCheckOutput = z.infer<typeof CounterCheckOutputSchema>;
+
 /** LLM의 snake_case 원시 출력을 spec/types.ts의 LlmJudgement(camelCase)로 옮긴다. */
 export function toLlmJudgement(raw: LlmJudgementRaw): LlmJudgement {
   return {

@@ -92,6 +92,25 @@ export const COMPANY_MATCHING_TOOL: {
   },
 };
 
+export const COUNTER_CHECK_TOOL: {
+  name: string;
+  description: string;
+  inputSchema: Tool.InputSchema;
+} = {
+  name: 'emit_counter_check',
+  description: '기존 연결 주장에 대한 반증 검사 결과',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['refuted', 'reason', 'adjusted_relevance'],
+    properties: {
+      refuted: { type: 'boolean' },
+      reason: { type: 'string' },
+      adjusted_relevance: { type: 'integer' },
+    },
+  },
+};
+
 export const ENTITY_EXTRACTION_TOOL: {
   name: string;
   description: string;

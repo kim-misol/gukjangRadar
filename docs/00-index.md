@@ -17,6 +17,7 @@
 | 버그가 "이상한 연결" 관련 | `12-edge-cases.md` → `13-validation.md` |
 | 다음에 뭘 만들지 | `15-build-order.md` → `14-backlog.md` |
 | 배포/호스팅 작업 (W8) | `18-deployment.md` |
+| 놓친 게 없는지, 다음에 뭐부터 손댈지 | `19-remaining-work.md` |
 
 ## 문서 목록
 | 파일 | STEP | 한 줄 |
@@ -38,3 +39,4 @@
 | `15-build-order.md` | 15 | 8주 MVP 순서 |
 | `16-news-sources.md` | 16 | 실시간 이슈 수집 소스 전략 (A/B/C 3층) |
 | `18-deployment.md` | 18 | 배포 대상별 스캐폴딩 상태 + 남은 결정 |
+| `19-remaining-work.md` | 19 | W1~W8 전체에서 미룬 것/미검증 항목 총정리 (스냅샷) |
