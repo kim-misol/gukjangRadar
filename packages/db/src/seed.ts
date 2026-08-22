@@ -243,6 +243,9 @@ async function main(): Promise<void> {
 
   let aliasCount = 0;
   const companyIdByTicker = new Map<string, number>();
+  // example.com의 가짜 URL을 쓰는 더미 뉴스라 실 서비스 DB에는 절대 넣지 않는다(CLAUDE.md §5,
+  // 2026-08-22 "오늘의 억지 관련주" fixture 오염 사고와 같은 종류의 문제). `SEED_DUMMY_NEWS=false`로 끈다.
+  const seedDummyNews = process.env.SEED_DUMMY_NEWS !== 'false';
 
   await db.transaction(async (tx) => {
     // 기업 + 별칭 인덱스 (T1.1.1/T1.1.3)
@@ -334,50 +337,52 @@ async function main(): Promise<void> {
     const now = new Date();
     const tradeDate = now.toISOString().slice(0, 10);
 
-    for (const n of SEED_NEWS) {
-      const sourceId = sourceIds[n.sourceIndex];
-      if (sourceId === undefined) throw new Error(`알 수 없는 sourceIndex: ${n.sourceIndex}`);
+    if (seedDummyNews) {
+      for (const n of SEED_NEWS) {
+        const sourceId = sourceIds[n.sourceIndex];
+        if (sourceId === undefined) throw new Error(`알 수 없는 sourceIndex: ${n.sourceIndex}`);
 
-      const [inserted] = await tx
-        .insert(schema.newsArticle)
-        .values({
-          sourceId,
-          url: n.url,
-          title: n.title,
-          publishedAt: now,
-        })
-        .onConflictDoNothing({ target: schema.newsArticle.url })
-        .returning({ id: schema.newsArticle.id });
+        const [inserted] = await tx
+          .insert(schema.newsArticle)
+          .values({
+            sourceId,
+            url: n.url,
+            title: n.title,
+            publishedAt: now,
+          })
+          .onConflictDoNothing({ target: schema.newsArticle.url })
+          .returning({ id: schema.newsArticle.id });
 
-      // onConflictDoNothing 이 아무것도 반환하지 않을 수 있으므로 재조회
-      const articleRow =
-        inserted ??
-        (
-          await tx
-            .select({ id: schema.newsArticle.id })
-            .from(schema.newsArticle)
-            .where(eq(schema.newsArticle.url, n.url))
-        )[0];
-      if (!articleRow) throw new Error(`뉴스 기사 조회 실패: ${n.url}`);
+        // onConflictDoNothing 이 아무것도 반환하지 않을 수 있으므로 재조회
+        const articleRow =
+          inserted ??
+          (
+            await tx
+              .select({ id: schema.newsArticle.id })
+              .from(schema.newsArticle)
+              .where(eq(schema.newsArticle.url, n.url))
+          )[0];
+        if (!articleRow) throw new Error(`뉴스 기사 조회 실패: ${n.url}`);
 
-      const [cluster] = await tx
-        .insert(schema.newsCluster)
-        .values({
-          headline: n.title,
-          tradeDate,
-          firstSeenAt: now,
-          lastSeenAt: now,
-          articleCount: 1,
-          analysisStatus: 'PENDING',
-          representativeArticleId: articleRow.id,
-        })
-        .returning({ id: schema.newsCluster.id });
-      if (!cluster) throw new Error(`뉴스 클러스터 생성 실패: ${n.title}`);
+        const [cluster] = await tx
+          .insert(schema.newsCluster)
+          .values({
+            headline: n.title,
+            tradeDate,
+            firstSeenAt: now,
+            lastSeenAt: now,
+            articleCount: 1,
+            analysisStatus: 'PENDING',
+            representativeArticleId: articleRow.id,
+          })
+          .returning({ id: schema.newsCluster.id });
+        if (!cluster) throw new Error(`뉴스 클러스터 생성 실패: ${n.title}`);
 
-      await tx
-        .insert(schema.clusterArticle)
-        .values({ clusterId: cluster.id, articleId: articleRow.id })
-        .onConflictDoNothing();
+        await tx
+          .insert(schema.clusterArticle)
+          .values({ clusterId: cluster.id, articleId: articleRow.id })
+          .onConflictDoNothing();
+      }
     }
 
     // 불용 개체 블랙리스트 — docs/08-prompt-entity-extraction.md §6-⑤ 그대로.
@@ -515,7 +520,7 @@ async function main(): Promise<void> {
   });
 
   console.log(
-    `✓ 시드 완료: 기업 ${SEED_COMPANIES.length}개, 별칭 ${aliasCount}개, 뉴스 ${SEED_NEWS.length}건`,
+    `✓ 시드 완료: 기업 ${SEED_COMPANIES.length}개, 별칭 ${aliasCount}개, 뉴스 ${seedDummyNews ? SEED_NEWS.length : 0}건${seedDummyNews ? '' : ' (SEED_DUMMY_NEWS=false로 건너뜀)'}`,
   );
   await pgClient.end();
 }

@@ -17,3 +17,8 @@ spec/prompts/**
 spec/golden/**
 spec/openapi.yaml
 spec/scoring.config.json
+
+# vercel integration add(Neon/Upstash, 2026-08-22)가 자동 설치한 벤더 스킬 문서 — 원본 그대로
+.agents/skills/**
+.claude/skills/**
+skills-lock.json
