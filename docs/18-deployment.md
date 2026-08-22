@@ -38,6 +38,25 @@
 3. Root Directory를 `apps/web`으로 바꾸면 Framework Preset이 자동으로 "Next.js"로 감지되고, `vercel.json`의 `outputDirectory`도 `.next`(Root Directory 기준)로 맞춰야 산출물을 찾는다 — `apps/web/.next`로 남겨두면 `apps/web/apps/web/.next`를 찾다가 빌드가 실패한다.
 결론: Root Directory=`apps/web` + `outputDirectory: ".next"` 조합이 유일하게 동작을 확인한 설정.
 
+**DB/Redis 프로비저닝 (2026-08-22)**: Vercel Marketplace로 Neon Postgres(`vercel integration add
+neon`) + Upstash Redis(`vercel integration add upstash/upstash-kv`)를 붙였다. 프로젝트에 이미
+`DATABASE_URL`/`REDIS_URL`이 등록돼 있으면(플레이스홀더라도) `vercel integration resource connect`가
+"already has an existing environment variable" 400으로 실패하니 먼저 `vercel env rm`으로 지운 뒤
+연결해야 한다. Upstash는 첫 설치 시 브라우저에서 마켓플레이스 약관 동의가 필요하다(`--non-interactive`론
+못 넘어감, `verification_uri`를 사람이 직접 열어야 함). `vercel env pull --environment production`으로
+받은 값 중 "Sensitive" 타입으로 등록된 변수(`JWT_SECRET`/`NODE_ENV`/`NEXT_PUBLIC_API_BASE_URL` 등)는
+`[SENSITIVE]`로 마스킹돼 내려오므로, 로컬에서 프로덕션 DB에 마이그레이션/시드를 돌릴 때는 필요한
+값(`DATABASE_URL` 등)만 골라서 export하고 나머지는 로컬 placeholder로 채워야 한다.
+
+**서버리스 함수 개수 제한 (2026-08-22 발견, 미해결)**: `apps/web`은 API 라우트 25개 + 동적 페이지
+11개, 총 **36개의 서버리스 함수**를 만든다. Vercel Hobby 플랜은 배포당 12개까지만 허용해
+`vercel deploy --prod`가 "No more than 12 Serverless Functions can be added to a Deployment on
+the Hobby plan"으로 실패한다. 오늘 백로그 커밋들로 라우트가 계속 늘면서 이 한계를 넘긴 것으로
+보이고, 그 이후 배포 시도(CLI/git-integration 모두)가 전부 실패해 프로덕션은 더 예전의,
+함수 수가 더 적었던 마지막 성공 빌드를 계속 서빙 중이다. 해결책은 Pro 플랜 업그레이드(즉시,
+과금) 또는 API 라우트를 도메인별 catch-all로 통합하는 리팩터링(무료, 회귀 위험 있는 작업) 중
+하나 — `docs/19-remaining-work.md` §0 참고, 결정 보류 중.
+
 필요한 환경변수(Vercel 프로젝트 설정에 등록): `DATABASE_URL`, `JWT_SECRET`,
 `KAKAO_CLIENT_ID`/`KAKAO_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`,
 `VAPID_PUBLIC_KEY`/`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `ADMIN_API_TOKEN`,
@@ -70,13 +89,17 @@ docker run --env-file .env -p 4000:4000 gukjang-worker
 
 ## 4. DB / Redis / 백업
 
-호스팅 대상 미정. 결정 기준: `pgvector` 확장을 지원해야 한다(company/entity 임베딩,
-`spec/schema.sql`). Redis는 BullMQ 지속성 요건(AOF/RDB)을 지원하는 곳이어야 한다.
-백업 주기·보존기간은 아직 정의 안 함 — 실제 호스팅을 정할 때 같이 정한다.
+**apps/web용은 해결됨(2026-08-22)**: Neon Postgres(pgvector 지원 확인) + Upstash Redis를
+Vercel Marketplace로 프로비저닝, `gukjang-radar-web` 프로젝트에 연결·마이그레이션까지 완료
+(§2 참고). **apps/worker(컨테이너)가 쓸 DATABASE_URL/REDIS_URL은 아직 별도로 안 정했다** —
+지금은 같은 Neon/Upstash 인스턴스를 공유해도 되는지, 워커 전용으로 따로 둘지 결정 필요.
+Redis는 BullMQ 지속성 요건(AOF/RDB)을 지원해야 하는데 Upstash Redis가 이걸 충족하는지
+확인 안 됨. 백업 주기·보존기간도 아직 정의 안 했다.
 
 ## 5. 남은 결정 (사용자 몫)
 
-- 워커/DB/Redis를 어디에 올릴지(Railway 단일 플랫폼으로 묶을지, 서비스별로 나눌지)
+- 워커(컨테이너)를 어디에 올릴지, 워커용 DB/Redis를 apps/web과 같은 Neon/Upstash로 묶을지 분리할지
+- Vercel Hobby 12-함수 제한 — Pro 업그레이드 vs API 라우트 통합 리팩터링 (§2, `docs/19` §0)
 - Sentry/카카오/구글 개발자 콘솔 계정 생성 및 실 크리덴셜 발급
 - 커스텀 도메인, HTTPS, DNS
 - 백업 정책

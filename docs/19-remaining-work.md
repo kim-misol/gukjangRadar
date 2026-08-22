@@ -13,7 +13,8 @@
 ## 0. 지금 배포를 막고 있는 것 (사람만 할 수 있음)
 | 항목 | 내용 |
 |---|---|
-| **Postgres/Redis 호스팅 — 지금 실제로 프로덕션을 막고 있음(2026-08-22 확인)** | `apps/web`이 Vercel 프로젝트 `gukjang-radar-web`으로 실제 배포돼 있고 빌드/배포 자체는 Ready 상태다. 하지만 Vercel 프로젝트의 `DATABASE_URL`/`REDIS_URL`이 `TODO-set-after-railway-postgres-setup`/`TODO-set-after-railway-redis-setup` 플레이스홀더 그대로 등록돼 있어 `/`, `/discovery`, `/api/v1/home` 등 DB를 만지는 모든 경로가 500(`getaddrinfo ENOTFOUND`, `vercel logs`로 확인)이다. 변수 이름이 이미 "railway"를 가리키고 있어 Railway로 결정된 걸로 보이나, 실제 프로비저닝(또는 Vercel Marketplace의 Neon/Upstash로 전환)과 Vercel 프로젝트 env 등록이 남아 있다 — `docs/18-deployment.md` §4~5 |
+| **(해소) Postgres/Redis 호스팅** | Vercel Marketplace로 Neon Postgres + Upstash Redis를 프로비저닝해 `gukjang-radar-web` 프로젝트(Production/Preview)에 연결, 플레이스홀더였던 `DATABASE_URL`/`REDIS_URL`을 실값으로 교체했다(2026-08-22). `pnpm --filter @gukjang/db migrate`를 실 Neon DB에 직접 돌려 스키마 생성까지 확인 — 그 과정에서 `packages/db/drizzle/0000_daffy_sentry.sql`이 `spec/schema.sql`과 달리 pgvector 익스텐션 생성문이 빠져 있던 실제 버그를 발견해 `migrate.ts`가 직접 보장하도록 고쳤다(로컬/도커는 `infra/postgres/init.sql`이 가려주고 있었음). seed도 `SEED_DUMMY_NEWS=false`로 실행해 회사 21개/별칭 48개만 채움(더미 뉴스 5건은 스킵 — seed.ts가 example.com 가짜 뉴스를 무조건 넣고 있던 것도 이번에 발견해 플래그로 분리, `docs/15` "5774147" 사고와 같은 종류라 프로덕션엔 절대 안 됨). |
+| **새로 발견 — 지금 실제로 프로덕션을 막고 있음(2026-08-22)** | `apps/web`이 실제로는 **서버리스 함수 36개**를 만드는데(API 라우트 25개 + 동적 페이지 11개) Vercel Hobby 플랜은 배포당 12개까지만 허용한다("No more than 12 Serverless Functions… Create a team (Pro plan)"). 오늘 여러 백로그 커밋(북마크/개체허브/파이프라인 대시보드/알림 등)으로 라우트가 계속 늘면서 어느 시점에 12개를 넘겼고, 그 이후 모든 배포 시도(CLI `vercel deploy --prod` 2회, git-integration 자동배포 1회)가 전부 이 에러로 실패했다 — 프로덕션 alias는 그보다 이전, 함수 수가 더 적었던 마지막 성공 빌드를 계속 서빙 중이라 지금도 전 경로 500. 사용자가 "지금은 보류" 선택(Pro 업그레이드 vs API 라우트 통합 리팩터링 중 택 1 필요) — `docs/18-deployment.md` §2 |
 | 카카오/구글 개발자 콘솔 앱 등록 | `KAKAO_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET` 발급 → Vercel 프로젝트 env |
 | Sentry 프로젝트 생성 | `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN`/`SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` |
 | 변호사 검토 | 이용약관/개인정보처리방침 초안 + 유사투자자문업 신고 여부 — T5.6, `docs/01-prd.md §7` |
@@ -36,7 +37,8 @@
     나열/유지보수하지 않아도(이 리포는 원격 캐시를 안 쓰므로 strict 모드의 캐시-정확성
     이점이 없음) 앞으로 `spec/types.ts`처럼 `env.ts`에 새 필드가 늘어도 CI가 또 깨지지 않는다.
     같은 재현 절차(`.env` 제거 + CI와 동일한 3개 env만 주입)로 `make ci` 전체 그린 확인함.
-    **아직 커밋 안 됨** — 커밋/푸시는 사용자 확인 후 진행.
+    커밋·푸시 완료(`7cc63ee`) — 다음 push에서 GitHub Actions가 실제로 통과하는지 아직 확인
+    안 됨(이 환경에 `gh` CLI가 없어 REST API로 매번 수동 조회해야 함).
 - `golden.yml`은 여전히 한 번도 안 돌았다 — `pull_request` 트리거뿐이라 PR을 열어야 처음
   확인된다(push 트리거 없음, 의도적 설계).
 
