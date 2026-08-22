@@ -28,6 +28,10 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgres://gukjang:gukjang@localhost:5432/gukjang_radar
+      # pnpm golden은 NODE_ENV=test로 돈다(2026-08-22, manual-verify-*.ts와 같은 원칙 —
+      # 로컬 개발 DB를 테스트 픽스처로 오염시키지 않기 위한 격리). CI는 매 실행마다 새
+      # ephemeral postgres 컨테이너를 쓰므로 dev/test를 나눌 이유가 없어 같은 DB를 가리킨다.
+      TEST_DATABASE_URL: postgres://gukjang:gukjang@localhost:5432/gukjang_radar
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-only-secret
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

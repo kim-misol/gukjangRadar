@@ -42,6 +42,10 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
+  // manual-verify-*.ts/pnpm golden 전용 격리 DB(2026-08-22, 실 사용자 신고로 도입) —
+  // NODE_ENV=test로 실행되면 DATABASE_URL 대신 이걸 쓴다(packages/db/src/client.ts).
+  // 개발 DB(DATABASE_URL)에 테스트 픽스처가 영구히 쌓여 실 서비스 화면에 노출되는 걸 막는다.
+  TEST_DATABASE_URL: z.string().optional(),
 
   ANTHROPIC_API_KEY: z.string().optional(),
   // docs/11 §4: "요약·개체는 저비용 모델, 심사·반증만 고성능 모델" — W4(요약/개체)는 이 모델을 쓴다.

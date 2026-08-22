@@ -8,18 +8,13 @@
  * (노루→노루페인트/노루홀딩스, 원희→원익 후보)에 필요한 englishName/formerNames가
  * 있는 회사는 해당 필드를 채워 둔다.
  */
-import {
-  loadEnv,
-  generateAliasCandidates,
-  normalizeEntityName,
-  normalizeName,
-  toJamo,
-} from '@gukjang/core';
+import { generateAliasCandidates, normalizeEntityName, normalizeName, toJamo } from '@gukjang/core';
 import type { CompanyAliasInput } from '@gukjang/core';
 import newsSourcesSeed from '@gukjang/spec/news_sources.seed.json';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { resolveDatabaseUrl } from './client';
 import * as schema from './schema';
 
 interface SeedCompany {
@@ -241,8 +236,7 @@ const SEED_NEWS: SeedNews[] = [
 ];
 
 async function main(): Promise<void> {
-  const env = loadEnv();
-  const pgClient = postgres(env.DATABASE_URL, { max: 1 });
+  const pgClient = postgres(resolveDatabaseUrl(), { max: 1 });
   const db = drizzle(pgClient, { schema });
 
   console.log('시드 시작…');

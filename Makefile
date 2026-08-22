@@ -76,8 +76,11 @@ setup:
 	@pnpm install
 	@echo "  [4/5] 인프라 기동 (postgres + redis)..."
 	@docker compose up -d || echo "         ⚠️  docker compose 실패. Docker Desktop이 실행 중인지 확인하세요."
-	@echo "  [5/5] DB 마이그레이션..."
+	@echo "  [5/6] DB 마이그레이션..."
 	@pnpm db:migrate || echo "         ⚠️  DB 연결 실패. 잠시 후 'make db-migrate'를 다시 실행하세요."
+	@echo "  [6/6] 테스트 DB 마이그레이션+시드 (manual-verify-*.ts/pnpm golden 전용, CLAUDE.md §5)..."
+	@NODE_ENV=test pnpm db:migrate && NODE_ENV=test pnpm db:seed \
+		|| echo "         ⚠️  테스트 DB 연결 실패. infra/postgres/init.sql이 gukjang_radar_test를 만들었는지 확인하세요."
 	@echo ""
 	@echo "  ✅ 셋업 완료!"
 	@echo ""

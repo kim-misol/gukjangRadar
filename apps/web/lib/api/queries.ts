@@ -248,6 +248,12 @@ async function representativeUrls(
 
 /** docs/03-ia.md §4 블록1 — MEME 연결 또는 meme_score≥70 상위 3건. */
 /** GET /v1/discovery/meme — spec/openapi.yaml. docs/03-ia.md §4 블록1과 같은 쿼리(limit만 다름). */
+/**
+ * docs/05-screen-specs.md S5 "오늘의 억지 관련주" — 회사당 최고 memeScore 1건만 남긴다
+ * (getWeeklyMemeHallOfFame과 같은 원칙). 회사별 dedup이 없으면 같은 회사가 여러 뉴스
+ * 클러스터에서 각각 MEME 연결을 만들었을 때 TOP N을 그 회사 하나가 다 차지해버린다
+ * (2026-08-22 실 사용자 신고로 발견 — "노루페인트"가 1~3등을 전부 차지하는 문제).
+ */
 export async function getMemeRank(
   db: Db,
   tradeDate: string,
@@ -288,10 +294,14 @@ export async function getMemeRank(
         sql`(${schema.connection.connectionType} = 'MEME' OR ${schema.connection.memeScore} >= 70)`,
       ),
     )
-    .orderBy(desc(schema.connection.memeScore))
-    .limit(limit);
+    .orderBy(desc(schema.connection.memeScore));
 
-  return rows.map((r, i) => {
+  const bestByCompany = new Map<number, (typeof rows)[number]>();
+  for (const r of rows) {
+    if (!bestByCompany.has(r.companyId)) bestByCompany.set(r.companyId, r);
+  }
+
+  return [...bestByCompany.values()].slice(0, limit).map((r, i) => {
     const row: ConnectionRow = {
       ...r,
       company: {

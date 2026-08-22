@@ -990,6 +990,65 @@ $2.01)가 그대로 집계돼 나오는 것까지 봤다. **미룬 것**: 일일
   `manual-verify-counter-check`(회귀 확인, 매칭·반증검사 단계는 기존 스크립트가 이미
   실행하던 경로라 새 assertion 없이 그린만 재확인) — 넷 다 실 postgres로 통과.
 
+**버그 수정 — "오늘의 억지 관련주" TOP3가 전부 같은 회사(2026-08-22, 실 사용자 신고)**:
+`/discovery` 화면에서 1~3등이 모두 "노루→노루페인트"로 동일하게 뜬다는 신고. 조사해 보니
+하드코딩이 아니라 `getMemeRank`(`apps/web/lib/api/queries.ts`)가 회사별 중복 제거를 안 해서
+생긴 실 데이터 문제였다 — 이 개발 DB에 "태풍 노루" fixture가 여러 세션에 걸쳐 반복
+적재되면서 노루페인트 하나가 서로 다른 뉴스 클러스터에서 만든 MEME 연결 여러 건이 전부
+`ORDER BY memeScore DESC LIMIT N`의 상위를 차지하고 있었다. 이미 있던
+`getWeeklyMemeHallOfFame`(주간 명예의 전당)은 애초에 "회사당 최고 1건만" dedup이 돼 있었는데
+`getMemeRank`(오늘의 억지 관련주, 홈/발견 양쪽에서 씀)만 빠져 있었던 것 — 같은
+`bestByCompany` Map 패턴을 그대로 적용해 맞췄다. 그 김에 화면 전체(홈/발견/뉴스/종목/검색/
+북마크/개체허브/알림)에 다른 하드코딩된 표시 데이터가 있는지도 감사했고, 이 건 외엔 없음을
+확인했다. **실 검증**: 실 서버로 `/api/v1/discovery/meme`·`/api/v1/home`·`/discovery` HTML
+왕복 — 수정 전엔 노루페인트만 반복되던 자리에 노루페인트/노루템프계열사/신라젠(홈, 3건)과
+노루페인트/노루템프계열사/신라젠/기아/원익홀딩스(발견, 5건)로 서로 다른 회사가 실제로 채워짐.
+
+**구조적 정리 — 테스트 데이터와 실 서비스 DB 분리(2026-08-22, 위 버그의 근본 원인 처리)**:
+위 버그의 진짜 원인을 추적해 보니 데이터 자체가 문제였다 — 전체 news_cluster 314건 중
+194건(62%), connection 190건 중 129건(68%)이 여러 세션에 걸쳐 `manual-verify-*.ts`가 반복
+남긴 "노루/원희" 등 fixture였다(실 RSS 수집 기사는 115건뿐). 사용자 요청("테스트 데이터는
+테스트에서만, 실 서비스에는 영향 없게")에 따라 두 단계로 처리했다.
+
+1. **지금 정리**: `scripts/clean-fixture-data.ts` 신설 — `news_source.domain ILIKE
+   '%fixture%'`에서 파생된 news_cluster/connection/entity/llm_run/guardrail_violation을
+   FK 순서에 맞게 지운다(`company`/`company_alias`/`concept` 시드 데이터는 절대 안 건드림 —
+   삭제 전 dry-run으로 대상을 항상 먼저 확인). entity는 (1) 실제 뉴스에서도 쓰이는지,
+   (2) 다른 entity가 canonical_id로 가리키고 있는지 안전장치를 통과한 것만 지운다. 실행 결과
+   news_cluster 194→0, connection 129건 제거, company/company_alias/concept은 22/48/14로
+   완전히 그대로. 정리 직후 `/discovery`가 "오늘은 조용합니다"로 정직하게 바뀜(가짜로 채워진
+   순위 대신 실제로 오늘 조건을 만족하는 연결이 없다는 뜻 — 지금 이 환경엔 라이브 파이프라인이
+   없어 다양한 실 뉴스가 매일 안 쌓이는 게 근본 원인, "실데이터 언제 연결되나" 논의와 같은 갭).
+2. **재발 방지**: `manual-verify-*.ts`/`pnpm golden`이 앞으로는 별도 `TEST_DATABASE_URL`
+   DB에만 쓰도록 구조를 바꿨다 — `packages/core/src/env.ts`에 `TEST_DATABASE_URL`(optional)
+   추가, `packages/db/src/client.ts`에 `resolveDatabaseUrl()`(신설, `getDb()`/`migrate.ts`/
+   `seed.ts`/`reset.ts`가 공유) — `NODE_ENV=test`면 `TEST_DATABASE_URL`을 쓰고, 없으면
+   조용히 개발 DB로 폴백하지 않고 바로 에러를 던진다(안전장치). `package.json`에서 DB에 직접
+   쓰는 9개 스크립트(dart-sync/news-pipeline/analysis/connections/counter-check/
+   market-snapshot/market-rescore/canonical-merge/entity-subtype-upsert)와 `golden`에
+   `NODE_ENV=test` 접두어를 붙였다. **HTTP 기반 4개(bookmarks/feedback-promotion/
+   review-recalc/w8-alerts)는 그대로 뒀다** — `pnpm dev` 중인 실제 서버(DATABASE_URL을 보는
+   그 프로세스)에 fetch로 요청을 보내는 구조라, 스크립트만 test DB로 옮기면 서버가 못 찾는
+   연결을 검증하려는 자기모순이 생긴다. 대신 이 4개는 이미 스스로 fixture를 지우는 걸
+   확인했고, `clean-fixture-data.ts`에 "클러스터는 지웠지만 news_article/news_source는
+   못 지운" 고아를 쓸어 담는 별도 스윕도 추가해 안전망을 이중으로 뒀다. `docker-compose`용
+   `infra/postgres/init.sql`과 `make setup`(6단계로 확장)도 테스트 DB를 자동으로 만들고
+   마이그레이션+시드하도록 맞췄다. `CLAUDE.md` §5에 이 원칙을 기록해 다음 세션이 몰라도
+   자동으로 지키게 함.
+   - **실 검증 중 두 가지 실제 버그를 더 잡음**: (1) `manual-verify-market-rescore.ts`가
+     오늘 날짜를 `TODAY = '2026-08-21'`로 하드코딩해 뒀었는데, 세션 도중 실제 날짜가
+     8/22로 넘어가면서 `rescoreConnectionsForMarketReaction`이 계산하는 "오늘"과 어긋나
+     `scanned:0`으로 조용히 실패하는 게 실제로 재현됨 — `now`에서 유도하도록 고침(날짜
+     하드코딩의 위험성을 그대로 보여준 사례). (2) `clean-fixture-data.ts` 자체에도 버그가
+     있었다 — fixture 클러스터가 참조하는 entity가 0건일 때 `sql.raw`로 만든
+     `ARRAY[NULL]`이 타입 추론에 실패해(`bigint = text`) 죽었다 — drizzle의 `inArray`/
+     `notInArray` 헬퍼로 바꿔 빈 배열도 안전하게 처리하도록 고침.
+   - **실 검증**: `pnpm manual-verify-connections`를 NODE_ENV=test로 실행 → 개발 DB
+     (123/63 그대로) vs 테스트 DB(5→9 클러스터, 0→6 connection)로 완전히 분리되는 것 확인.
+     `pnpm golden`도 NODE_ENV=test로 실 LLM 17/17 통과 + 개발 DB 무변화 확인. `golden.yml`엔
+     `TEST_DATABASE_URL`을 CI의 동일 ephemeral postgres로 추가(CI는 매번 새 DB라 dev/test
+     구분이 필요 없음).
+
 ---
 ## 주차별 게이트 (통과 못 하면 다음 주로 넘어가지 않는다)
 | 주 | 게이트 |

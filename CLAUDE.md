@@ -54,6 +54,12 @@ apps/web  apps/worker  packages/core  packages/db  spec/  docs/
 3. **Refactor** — 테스트가 초록인 상태를 유지하며 정리한다. 테스트 자체는 동작이 바뀌는 게 아니면 건드리지 않는다.
 
 - 테스트 실행: `make test`(전체) 또는 `pnpm --filter <pkg> test`(해당 워크스페이스만, 예: `@gukjang/core`).
+- `manual-verify-*.ts`/`pnpm golden`은 `TEST_DATABASE_URL`(별도 postgres DB, `NODE_ENV=test`일 때만
+  씀 — `packages/db/src/client.ts`)에 fixture를 남긴다. **개발 DB(`DATABASE_URL`, `pnpm dev`로 보는
+  화면과 같은 DB)에는 절대 쓰지 않는다** — 안 지키면 테스트 데이터가 실 서비스 화면에 노출된다
+  (2026-08-22 실사례: "오늘의 억지 관련주"가 반복 축적된 fixture로 도배됨, `docs/15` 참고). 새
+  검증 스크립트를 추가할 때도 이 원칙을 따를 것. 로컬 개발 DB에 이미 쌓인 fixture는
+  `pnpm clean-fixture-data`로 정리한다(`fixture.local` 소스 기반만 지우고 seed 데이터는 안 건드림).
 - 커밋 전에 로컬에서 CI와 동일한 게이트를 통과시킨다: `make ci`
   (format-check → lint → typecheck → test → check-enum-sync → lint-forbidden-words, `.github/workflows/ci.yml`과 동일 순서).
 - 커밋 메시지:

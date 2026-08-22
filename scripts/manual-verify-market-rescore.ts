@@ -25,11 +25,14 @@ import {
 import { rescoreConnectionsForMarketReaction } from '../apps/worker/src/connections/rescore-market';
 import { setupClusterWithEntity } from './lib/fixtures';
 
-const TODAY = '2026-08-21';
-
 async function main(): Promise<void> {
   const db = getDb();
   const now = new Date();
+  // rescoreConnectionsForMarketReaction이 내부적으로 now로부터 오늘 날짜를 계산하므로
+  // fixture도 반드시 같은 방식으로 맞춰야 한다 — 하드코딩된 날짜 문자열은 실행 시점의
+  // 실제 날짜와 어긋나는 순간(예: 자정을 넘기면) scanned:0으로 조용히 실패한다
+  // (2026-08-22 실제로 재현된 버그 — 하드코딩 대신 항상 now에서 유도할 것).
+  const TODAY = now.toISOString().slice(0, 10);
   const scoring = scoringConfig as unknown as ScoringConfig;
   const marketReaction = scoringConfig.marketReaction as MarketReactionConfig;
 

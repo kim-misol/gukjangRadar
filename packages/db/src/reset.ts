@@ -4,12 +4,11 @@
  * 로컬 개발에서 완전히 되돌리고 싶을 때는 스키마를 통째로 drop/recreate 한다.
  * 실행: pnpm db:reset (이후 pnpm db:migrate 로 다시 up)
  */
-import { loadEnv } from '@gukjang/core';
 import postgres from 'postgres';
+import { resolveDatabaseUrl } from './client';
 
 async function main(): Promise<void> {
-  const env = loadEnv();
-  const sql = postgres(env.DATABASE_URL, { max: 1 });
+  const sql = postgres(resolveDatabaseUrl(), { max: 1 });
 
   console.log('스키마 초기화(down) 시작…');
   await sql`DROP SCHEMA public CASCADE`;
