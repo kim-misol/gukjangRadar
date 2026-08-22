@@ -3,7 +3,6 @@
 > W8에 스캐폴딩만 했다(실제 계정 생성·배포 실행 없음, docs/15-build-order.md W8 참고).
 > 이 문서는 "무엇이 준비돼 있고 무엇이 남았는지"를 적는다 — 실행 방법 자체는
 > 각 호스팅 서비스 문서를 따른다.
-
 ## 1. 구성 요소별 배포 대상
 
 | 구성 요소 | 대상 | 상태 |
@@ -23,14 +22,21 @@
 {
   "buildCommand": "pnpm --filter @gukjang/web build",
   "installCommand": "pnpm install --frozen-lockfile",
-  "outputDirectory": "apps/web/.next"
+  "outputDirectory": ".next"
 }
 ```
-Vercel 프로젝트의 **Root Directory는 저장소 루트 그대로 둔다**(apps/web으로 바꾸지 않는다) —
-`vercel.json`의 경로들이 루트 기준이기 때문이다. `apps/web/next.config.ts`가 `@gukjang/core`/
-`@gukjang/spec`를 `transpilePackages`로 직접 번들링하므로(두 패키지는 `dist`가 아니라 소스를
-바로 가리킨다, `packages/*/package.json`의 `exports`) 별도 빌드 단계 없이 `next build` 하나로
-끝난다 — 이번 세션에 여러 번 실제로 확인함.
+**Root Directory는 `apps/web`으로 설정한다** (저장소 루트가 아니다 — 이 문서에 예전에 반대로
+적혀 있었으나 실제 배포 세션에서 틀린 것으로 확인됨, 아래 "실제 배포로 확인한 것" 참고).
+`vercel.json`의 `outputDirectory`는 이제 Root Directory(`apps/web`) 기준 상대경로인 `.next`로
+맞춘다. `apps/web/next.config.ts`가 `@gukjang/core`/`@gukjang/spec`를 `transpilePackages`로
+직접 번들링하므로(두 패키지는 `dist`가 아니라 소스를 바로 가리킨다, `packages/*/package.json`의
+`exports`) 별도 빌드 단계 없이 `next build` 하나로 끝난다 — 이번 세션에 여러 번 실제로 확인함.
+
+**실제 배포로 확인한 것 (2026-08-22 세션)**: Vercel에 실제로 import해서 세 번 배포를 돌려봄.
+1. Root Directory를 저장소 루트로 두면 Framework Preset이 자동으로 "Other"가 되고, 빌드 자체는 성공하지만 `.next` 산출물을 정적 파일로만 서빙해 모든 페이지가 `404: NOT_FOUND`로 뜬다 (서버 렌더링이 전혀 동작 안 함 — Next.js 런타임/서버리스 함수가 아예 안 만들어짐).
+2. Framework Preset을 수동으로 "Next.js"로 바꿔도 Root Directory가 저장소 루트인 채로는 "No Next.js version detected" 빌드 에러가 난다 — 저장소 루트 `package.json`엔 `next` 의존성이 없기 때문(모노레포 특성상 `apps/web/package.json`에만 있음).
+3. Root Directory를 `apps/web`으로 바꾸면 Framework Preset이 자동으로 "Next.js"로 감지되고, `vercel.json`의 `outputDirectory`도 `.next`(Root Directory 기준)로 맞춰야 산출물을 찾는다 — `apps/web/.next`로 남겨두면 `apps/web/apps/web/.next`를 찾다가 빌드가 실패한다.
+결론: Root Directory=`apps/web` + `outputDirectory: ".next"` 조합이 유일하게 동작을 확인한 설정.
 
 필요한 환경변수(Vercel 프로젝트 설정에 등록): `DATABASE_URL`, `JWT_SECRET`,
 `KAKAO_CLIENT_ID`/`KAKAO_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`,
