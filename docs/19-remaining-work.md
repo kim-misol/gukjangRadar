@@ -13,18 +13,32 @@
 ## 0. 지금 배포를 막고 있는 것 (사람만 할 수 있음)
 | 항목 | 내용 |
 |---|---|
-| 카카오/구글 개발자 콘솔 앱 등록 | `KAKAO_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET` 발급 → `.env` |
+| **Postgres/Redis 호스팅 — 지금 실제로 프로덕션을 막고 있음(2026-08-22 확인)** | `apps/web`이 Vercel 프로젝트 `gukjang-radar-web`으로 실제 배포돼 있고 빌드/배포 자체는 Ready 상태다. 하지만 Vercel 프로젝트의 `DATABASE_URL`/`REDIS_URL`이 `TODO-set-after-railway-postgres-setup`/`TODO-set-after-railway-redis-setup` 플레이스홀더 그대로 등록돼 있어 `/`, `/discovery`, `/api/v1/home` 등 DB를 만지는 모든 경로가 500(`getaddrinfo ENOTFOUND`, `vercel logs`로 확인)이다. 변수 이름이 이미 "railway"를 가리키고 있어 Railway로 결정된 걸로 보이나, 실제 프로비저닝(또는 Vercel Marketplace의 Neon/Upstash로 전환)과 Vercel 프로젝트 env 등록이 남아 있다 — `docs/18-deployment.md` §4~5 |
+| 카카오/구글 개발자 콘솔 앱 등록 | `KAKAO_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET` 발급 → Vercel 프로젝트 env |
 | Sentry 프로젝트 생성 | `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN`/`SENTRY_ORG`/`SENTRY_PROJECT`/`SENTRY_AUTH_TOKEN` |
-| 호스팅 결정 | 워커(컨테이너)·Postgres(pgvector)·Redis를 어디에 올릴지 — `docs/18-deployment.md` §4~5 |
 | 변호사 검토 | 이용약관/개인정보처리방침 초안 + 유사투자자문업 신고 여부 — T5.6, `docs/01-prd.md §7` |
 | 도메인/HTTPS/백업 정책 | 미정 |
 
 ## 1. Git / CI — 지금 당장 확인할 것
-- **로컬 `main`이 `origin/main`보다 커밋이 앞서 있다(push 안 됨, 사용자가 명시적으로 보류
-  요청함)** — 즉 `.github/workflows/golden.yml`(PR마다 골든셋 자동 실행 + 코멘트, W7에
-  만듦)이 **한 번도 실제로 실행된 적이 없다**. 로컬에서 `pnpm golden`/`make ci`로만 확인했다.
-  push/PR을 만들어야 CI가 실제로 도는 걸 처음 확인하게 된다.
-- `ci.yml`도 이 리포에서 실제로 GitHub Actions 상에서 통과하는지 아직 못 봤다.
+- **(해소) push는 이미 됐다** — 로컬 `main`이 `origin/main`과 완전히 동기화돼 있다. `ci.yml`이
+  실제로 GitHub Actions에서 4번(push마다) 돌았는데 **4번 다 실패**했다(2026-08-22 확인,
+  `gh` CLI가 이 환경에 없어 GitHub REST API로 직접 조회) — Test 스텝에서만 죽고
+  Format/Lint/Typecheck는 통과했다.
+  - **원인 특정**: `turbo.json`에 `env`/`passThroughEnv` 선언이 없어 Turborepo 기본
+    strict env 모드가 `test` 태스크로 넘어가는 프로세스에서 `DATABASE_URL`/`REDIS_URL`/
+    `JWT_SECRET`을 걸러낸다. 로컬에서는 각 vitest 프로세스가 `packages/core/src/env.ts`의
+    `loadRepoRootEnvFile()`로 리포 루트 `.env`를 직접 읽어버려서 turbo가 뭘 걸러내든 상관없이
+    통과해왔다 — CI 러너엔 `.env` 파일 자체가 없어(gitignore) `ci.yml`이 job 레벨 `env:`로
+    준 값에 전적으로 의존하는데, 그게 turbo에서 막혔던 것. `.env`를 임시로 치우고
+    `env -i ... DATABASE_URL=... REDIS_URL=... JWT_SECRET=... pnpm turbo run test --force`로
+    CI를 그대로 재현해 확인했다(`lib/auth/jwt.test.ts` 3건 실패, "환경변수 검증 실패").
+  - **수정**: `turbo.json`에 `"envMode": "loose"` 추가 — 개별 env var를 일일이
+    나열/유지보수하지 않아도(이 리포는 원격 캐시를 안 쓰므로 strict 모드의 캐시-정확성
+    이점이 없음) 앞으로 `spec/types.ts`처럼 `env.ts`에 새 필드가 늘어도 CI가 또 깨지지 않는다.
+    같은 재현 절차(`.env` 제거 + CI와 동일한 3개 env만 주입)로 `make ci` 전체 그린 확인함.
+    **아직 커밋 안 됨** — 커밋/푸시는 사용자 확인 후 진행.
+- `golden.yml`은 여전히 한 번도 안 돌았다 — `pull_request` 트리거뿐이라 PR을 열어야 처음
+  확인된다(push 트리거 없음, 의도적 설계).
 
 ## 2. M(V1 필수) — 2026-08-21 백로그 정리에서 전부 처리함
 `docs/04-mvp-features.md`가 Must로 매긴 항목 중 비어 있던 3개를 우선순위대로 처리했다
